@@ -1,0 +1,11 @@
+# Defines the configuration schema for farm_cfp.settings.
+farm_cfp.settings:
+  type: config_object
+  label: 'Cool Farm Platform settings'
+  mapping:
+    api_key:
+      type: string
+      label: 'Cool Farm Platform API Key'
+    api_url:
+      type: string
+      label: 'Cool Farm Platform API URL'

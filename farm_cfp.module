@@ -1,0 +1,71 @@
+<?php
+
+/**
+ * @file
+ * Primary module hooks for farmOS Cool Farm Platform module.
+ */
+
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Field\FieldStorageDefinitionInterface;
+
+/**
+ * Implements hook_entity_bundle_field_info().
+ */
+function farm_cfp_farm_entity_bundle_field_info(EntityTypeInterface $entity_type, $bundle) {
+  $fields = [];
+
+  if ($entity_type->id() == 'organization' && $bundle == 'farm') {
+    $options = [
+      'type' => 'string',
+      'label' => t('CFP Farm ID'),
+      'description' => t('The unique identifier for this farm in the Cool Farm Platform.'),
+    ];
+    $fields['cfp_farm_id'] = \Drupal::service('farm_field.factory')->bundleFieldDefinition($options);
+  }
+
+  if ($entity_type->id() == 'asset' && $bundle == 'plant') {
+    $options = [
+      'type' => 'list_string',
+      'label' => t('CFP Pathway'),
+      'description' => t('The Cool Farm Platform pathway for this plant.'),
+      'allowed_values_function' => 'farm_cfp_pathway_allowed_values',
+      'form_display_options' => [
+        'type' => 'options_select',
+        'weight' => -80,
+      ],
+    ];
+    $fields['cfp_pathway'] = \Drupal::service('farm_field.factory')->bundleFieldDefinition($options);
+  }
+
+  if ($entity_type->id() == 'log' && $bundle == 'observation') {
+    $options = [
+      'type' => 'boolean',
+      'label' => t('Is CFP Assessment'),
+      'description' => t('This is a Cool Farm Platform assessment log.'),
+      'form_display_options' => [
+        'weight' => 100,
+      ],
+    ];
+    $fields['cfp'] = \Drupal::service('farm_field.factory')->bundleFieldDefinition($options);
+  }
+
+  return $fields;
+}
+
+/**
+ * Allowed values callback for CFP Pathway Type field.
+ */
+function farm_cfp_pathway_allowed_values(FieldStorageDefinitionInterface $definition, ?ContentEntityInterface $entity = NULL, bool &$cacheable = TRUE) {
+  $options = [];
+
+  $terms = \Drupal::entityTypeManager()
+    ->getStorage('taxonomy_term')
+    ->loadByProperties(['vid' => 'cfp_pathway']);
+
+  foreach ($terms as $term) {
+    $options[$term->id()] = $term->label();
+  }
+
+  return $options;
+}

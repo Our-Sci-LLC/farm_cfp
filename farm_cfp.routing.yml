@@ -1,0 +1,15 @@
+farm_cfp.settings:
+  path: '/farm/settings/cfp'
+  defaults:
+    _title: 'Cool Farm Platform settings'
+    _form: 'Drupal\farm_cfp\Form\SettingsForm'
+  requirements:
+    _permission: 'administer farm_cfp settings'
+
+farm_cfp.add_assessment:
+  path: '/cfp/assessment/add'
+  defaults:
+    _form: '\Drupal\farm_cfp\Form\AssessmentForm'
+    _title: 'Create CFP Assessment'
+  requirements:
+    _permission: 'create cfp assessment'

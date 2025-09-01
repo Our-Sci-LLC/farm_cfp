@@ -1,0 +1,9 @@
+name: 'farmOS Cool Farm Platform'
+type: module
+description: 'farmOS Cool Farm Platform integration'
+package: farmOS Contrib
+core_version_requirement: ^10 || ^11
+dependencies:
+  - farm_farm
+  - farm_flag
+  - key:key

@@ -1,0 +1,5 @@
+administer farm_cfp settings:
+  title: 'Administer farmOS Cool Farm Platform'
+
+create cfp assessment:
+  title: 'Create CFP assessment'

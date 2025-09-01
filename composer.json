@@ -1,0 +1,19 @@
+{
+    "name": "drupal/farm_cfp",
+    "type": "drupal-module",
+    "description": "Provides integration with the Cool Farm Platform for farmOS.",
+    "keywords": [
+        "Drupal"
+    ],
+    "license": "GPL-2.0+",
+    "homepage": "https://www.drupal.org/project/farm_cfp",
+    "minimum-stability": "dev",
+    "support": {
+        "issues": "https://www.drupal.org/project/issues/farm_cfp",
+        "source": "https://cgit.drupalcode.org/farm_cfp"
+    },
+    "require": {
+        "farmos/farmos": "^3.4",
+        "drupal/keys": "^1"
+    }
+}

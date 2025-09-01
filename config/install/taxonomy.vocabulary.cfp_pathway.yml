@@ -1,0 +1,11 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - farm_cfp
+name: 'CFP Pathway'
+vid: cfp_pathway
+description: 'Cool Farm Platform assessment pathway.'
+weight: 0
+new_revision: false

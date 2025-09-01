@@ -1,0 +1,13 @@
+services:
+  logger.channel.farm_cfp:
+    parent: logger.channel_base
+    arguments: [ 'simple_oauth' ]
+  farm_cfp.api:
+    class: Drupal\farm_cfp\Service\CfpApiService
+    arguments:
+      - '@http_client'
+      - '@config.factory'
+      - '@key.repository'
+      - '@logger.channel.farm_cfp'
+  farm_cfp.form_builder:
+    class: Drupal\farm_cfp\Service\CfpFormBuilder

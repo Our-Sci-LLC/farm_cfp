@@ -1,0 +1,5 @@
+farm_cfp.add_assessment:
+  route_name: 'farm_cfp.add_assessment'
+  title: 'Add Assessment'
+  appears_on:
+    - 'view.farm_cfp_assessments.page'

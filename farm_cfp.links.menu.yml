@@ -1,0 +1,5 @@
+farm_cfp.integrations:
+  title: Integrations
+  parent: farm.base
+  route_name: '<front>'
+  weight: 10
