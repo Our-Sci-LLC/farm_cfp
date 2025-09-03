@@ -2,6 +2,7 @@
 
 namespace Drupal\farm_cfp\Service;
 
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
@@ -90,6 +91,7 @@ class CfpFormBuilder {
       '#title' => $this->t($oneOf['title']),
       '#options' => $options,
       '#default_value' => '0',
+      '#id' => $key . '-wrapper',
     ];
   }
 
@@ -156,4 +158,21 @@ class CfpFormBuilder {
     $form[$key] = $field;
   }
 
+  /**
+   * Builds a sample submission JSON for testing purposes.
+   *
+   * @return array The sample submission JSON.
+   */
+  public function buildSubmissionData(FormStateInterface $form_state) : array {
+    // Placeholder for submission JSON building logic.
+    return [
+      "name" => "Test assessment",
+      "farmId" => "091299f7-0595-408c-85f7-5eb05ec3dcff",
+      "purposes" => [
+        "Testing"
+      ],
+      "pathway" => "Paddy Rice v3"
+    ];
+
+  }
 }

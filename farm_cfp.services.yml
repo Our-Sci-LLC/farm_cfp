@@ -7,7 +7,6 @@ services:
     arguments:
       - '@http_client'
       - '@config.factory'
-      - '@key.repository'
       - '@logger.channel.farm_cfp'
   farm_cfp.form_builder:
     class: Drupal\farm_cfp\Service\CfpFormBuilder

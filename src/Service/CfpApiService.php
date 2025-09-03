@@ -5,7 +5,6 @@ namespace Drupal\farm_cfp\Service;
 use Drupal\Component\Serialization\Json;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
-use Drupal\key\KeyRepositoryInterface;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\RequestException;
 use Psr\Log\LoggerInterface;
@@ -33,13 +32,6 @@ class CfpApiService {
   protected $configFactory;
 
   /**
-   * The key repository.
-   *
-   * @var \Drupal\key\KeyRepositoryInterface
-   */
-  protected $keyRepository;
-
-  /**
    * The base URL for the Cool Farm Platform API.
    *
    * @var string
@@ -60,15 +52,12 @@ class CfpApiService {
    * The Guzzle HTTP client.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    * The configuration factory.
-   * @param \Drupal\key\KeyRepositoryInterface $key_repository
-   * The key repository service.
    * @param \Psr\Log\LoggerInterface $logger
    * * The logger service.
  */
-  public function __construct(ClientInterface $http_client, ConfigFactoryInterface $config_factory, KeyRepositoryInterface $key_repository, LoggerInterface $logger) {
+  public function __construct(ClientInterface $http_client, ConfigFactoryInterface $config_factory, LoggerInterface $logger) {
     $this->httpClient = $http_client;
     $this->configFactory = $config_factory;
-    $this->keyRepository = $key_repository;
     $this->logger = $logger;
     $this->apiUrl = $this->configFactory->get('farm_cfp.settings')->get('api_url');
   }
@@ -88,15 +77,7 @@ class CfpApiService {
    */
   protected function getApiKey() {
     $config = $this->configFactory->get('farm_cfp.settings');
-    $key_id = $config->get('api_key');
-
-    if ($key_id) {
-      $key = $this->keyRepository->getKey($key_id);
-      if ($key) {
-        return $key->getKeyValue();
-      }
-    }
-    return NULL;
+    return $config->get('api_key');
   }
 
   /**
@@ -297,6 +278,7 @@ class CfpApiService {
 
   /**
    * POST /api-key
+   *
    *
    * Create an API Key.
    *

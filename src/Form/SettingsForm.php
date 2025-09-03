@@ -39,10 +39,11 @@ class SettingsForm extends ConfigFormBase {
     ];
 
     $form['api_key'] = [
-      '#type' => 'key_select',
+      '#type' => 'textfield',
+      '#maxlength' => 4096,
       '#title' => $this->t('Cool Farm Platform API Key'),
       '#default_value' => $config->get('api_key'),
-      '#description' => $this->t('Select the key containing your API secret for the Cool Farm Platform.'),
+      '#description' => $this->t('The API key for the Cool Farm Platform.'),
       '#required' => TRUE,
     ];
 

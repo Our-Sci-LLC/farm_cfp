@@ -3,11 +3,9 @@ status: true
 dependencies:
   config:
     - log.type.observation
-    - system.menu.admin
   module:
     - entity_reference_revisions
     - log
-    - options
     - state_machine
     - user
   enforced:
@@ -533,49 +531,6 @@ display:
             default_group: All
             default_group_multiple: {  }
             group_items: {  }
-        flag_value:
-          id: flag_value
-          table: log__flag
-          field: flag_value
-          relationship: none
-          group_type: group
-          admin_label: ''
-          entity_type: log
-          entity_field: flag
-          plugin_id: list_field
-          operator: or
-          value:
-            cfp: cfp
-          group: 1
-          exposed: false
-          expose:
-            operator_id: flag_value_op
-            label: Flags
-            description: ''
-            use_operator: false
-            operator: flag_value_op
-            operator_limit_selection: false
-            operator_list: {  }
-            identifier: flag_value
-            required: false
-            remember: false
-            multiple: true
-            remember_roles:
-              authenticated: authenticated
-            reduce: false
-          is_grouped: false
-          group_info:
-            label: ''
-            description: ''
-            identifier: ''
-            optional: true
-            widget: select
-            multiple: false
-            remember: false
-            default_group: All
-            default_group_multiple: {  }
-            group_items: {  }
-          reduce_duplicates: true
         timestamp:
           id: timestamp
           table: log_field_data
@@ -829,8 +784,8 @@ display:
         - url.query_args
         - user.permissions
       tags: {  }
-  page:
-    id: page
+  list:
+    id: list
     display_title: 'All assessments (page)'
     display_plugin: page
     position: 1
@@ -854,13 +809,13 @@ display:
           collapsible: true
       path: integrations/cfp
       menu:
-        type: normal
-        title: 'CFP Assessments'
+        type: none
+        title: ''
         description: ''
         weight: 0
         expanded: true
         menu_name: admin
-        parent: farm_cfp.integrations
+        parent: ''
         context: '0'
     cache_metadata:
       max-age: 0

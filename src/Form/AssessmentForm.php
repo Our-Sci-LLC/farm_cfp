@@ -73,31 +73,7 @@ class AssessmentForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $step = $form_state->get('step') ?? 1;
 
-    $form['multistep_wrapper'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'multistep-form-wrapper'],
-    ];
-
-    switch ($step) {
-      case 1:
-        $this->buildStep1Form($form['multistep_wrapper'], $form_state);
-        break;
-      case 2:
-        $this->buildStep2Form($form['multistep_wrapper'], $form_state);
-        break;
-    }
-
-    $form['#form_id'] = 'cfp_assessment_form';
-
-    return $form;
-  }
-
-  /**
-   * Build the form for the first step, selecting the plant and pathway.
-   */
-  protected function buildStep1Form(array &$form, FormStateInterface $form_state) {
     $form['plant'] = [
       '#type' => 'entity_autocomplete',
       '#title' => $this->t('Select a Planting'),
@@ -108,139 +84,48 @@ class AssessmentForm extends FormBase {
       '#required' => TRUE,
       '#ajax' => [
         'callback' => [$this, 'plantCallback'],
-        'wrapper' => 'step1-wrapper',
+        'wrapper' => 'assessment-params-wrapper',
         'event' => 'autocompleteclose change',
       ],
     ];
-
-    $form['step1_wrapper'] = [
+    
+    $form['assessment_params_wrapper'] = [
       '#type' => 'container',
-      '#attributes' => ['id' => 'step1-wrapper'],
-      'cfp_pathway' => [
-        '#type' => 'select',
-        '#title' => $this->t('CFP Pathway'),
-        '#options' => $this::pathwayAllowedValues(),
-        '#required' => TRUE,
-        '#empty_option' => $this->t('- Select -'),
-        '#empty_value' => '',
-      ],
-      'messages' => [
-        '#type' => 'markup',
-        '#markup' => '',
-      ],
+      '#attributes' => ['id' => 'assessment-params-wrapper'],
     ];
 
-    $form['actions']['submit'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Start Assessment'),
-      '#name' => 'start_assessment',
-      '#ajax' => [
-        'callback' => [$this, 'ajaxStartAssessment'],
-        'wrapper' => 'multistep-form-wrapper',
-      ],
-    ];
-  }
-
-  /**
-   * Ajax callback to handle the "Start Assessment" button.
-   */
-  public function ajaxStartAssessment(array $form, FormStateInterface $form_state) {
-    // Manually run validation on the form.
-    $form_state->setSubmitted();
-    $this->validateForm($form, $form_state);
-
-    if ($form_state->getErrors()) {
-      return $form['multistep_wrapper'];
-    }
-
-    // Persist the pathway value for the next step.
-    $selected_pathway_value = $form_state->getValue('cfp_pathway');
-    $form_state->set('cfp_pathway', $selected_pathway_value);
-
-    // Set the step to 2 and flag for rebuild.
-    $form_state->set('step', 2);
-    $form_state->setRebuild();
-
-    $new_form = [];
-    $new_form['multistep_wrapper'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'multistep-form-wrapper'],
-    ];
-    $this->buildStep2Form($new_form['multistep_wrapper'], $form_state);
-
-    return $new_form['multistep_wrapper'];
-  }
-  
-  /**
-   * Ajax callback for plant field.
-   */
-  public function plantCallback(array $form, FormStateInterface $form_state) {
-    $plant_id = $form_state->getValue('plant');
-    $wrapper = &$form['multistep_wrapper']['step1_wrapper'];
-
-    $wrapper['messages']['#markup'] = '';
-
-    if ($plant_id) {
-      $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
-      $farm_reference = $plant->get('farm');
-
-      $term_id = $plant->get('cfp_pathway')->value;
-
-      $wrapper['cfp_pathway']['#value'] = $term_id;
-      $form_state->setValue('cfp_pathway', $term_id);
-
-      if ($farm_reference->isEmpty() || $this->entityTypeManager->getStorage('organization')->load($farm_reference->target_id)->get('cfp_farm_id')->isEmpty()) {
-        $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
-        $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
-        $wrapper['messages']['#markup'] = '<div class="messages messages--error">' .
-          $this->t('The plant must be assigned to a farm with a Cool Farm Platform ID. Please @link to assign a farm.',
-            ['@link' => $link]) .
-          '</div>';
-      }
-    }
-
-    return $wrapper;
-  }
-
-  /**
-   * Build the form for the second step.
-   */
-  protected function buildStep2Form(array &$form, FormStateInterface $form_state) {
-    $plant_id = $form_state->getValue('plant');
-    $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
-    $plant_name = $plant->label();
-
-    // Retrieve the stored CFP pathway ID from the form state.
-    $selected_pathway = $form_state->get('cfp_pathway');
-    $pathway_label = Term::load($selected_pathway)->label();
-
-    $form['#title'] = $this->t('Assessment for @plant', ['@plant' => $plant_name]);
-
-    $form['pathway_info'] = [
+    $form['assessment_params_wrapper']['plant_name'] = [
       '#type' => 'markup',
-      '#markup' => '<h4>' . $this->t('CFP Pathway: @pathway', ['@pathway' => $pathway_label]) . '</h4>',
+      '#markup' => '<h3>' . $form_state->getValue('plant') . ' ' . $this->t('Assessment') . '</h3>',
     ];
 
-    // Fetch the schema for the selected pathway.
-    $schema = $this->cfpApiService->fetchPathway($pathway_label);
+    $form['assessment_params_wrapper']['cfp_pathway'] = [
+      '#type' => 'select',
+      '#title' => $this->t('CFP Pathway'),
+      '#options' => $this::pathwayAllowedValues(),
+      '#required' => TRUE,
+      '#empty_option' => $this->t('- Select -'),
+      '#empty_value' => '',
+      '#ajax' => [
+        'callback' => [$this, 'pathwayCallback'],
+        'wrapper' => 'pathway-params-wrapper',
+        'event' => 'change select',
+      ],
+    ];
 
-    if (!$schema) {
-      $form['error'] = [
-        '#markup' => '<div class="messages messages--error">' .
-          $this->t('Failed to load schema for the selected CFP pathway.') .
-          '</div>',
-      ];
-      return $form;
+    $form['pathway_params_wrapper'] = [
+      '#type' => 'container',
+      '#attributes' => ['id' => 'pathway-params-wrapper'],
+    ];
+
+    $term_id = $form_state->getValue('cfp_pathway');
+    if (!empty($term_id)) {
+      $form['pathway_params_wrapper']['params'] = $this->buildPathwayFields($term_id);
     }
 
-    $form['cfp_fields'] = $this->cfpFormBuilder->buildFormFromSchema($schema);
-
-    $form['actions']['back'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Back'),
-      '#name' => 'back_step',
-      '#submit' => ['::backStep'],
-      '#limit_validation_errors' => [],
+    $form['assessment_params_wrapper']['farm_id'] = [
+      '#type' => 'hidden',
+      '#value' => '',
     ];
 
     $form['actions']['submit'] = [
@@ -253,21 +138,102 @@ class AssessmentForm extends FormBase {
   }
 
   /**
-   * Custom submit handler for the "Back" button.
+   * Ajax callback for plant field.
    */
-  public function backStep(array &$form, FormStateInterface $form_state) {
-    $form_state->set('step', 1);
-    $plant = $form_state->getValue('plant');
-    $form_state->set('cfp_pathway', $plant);
-    $pathway = $form_state->getValue('cfp_pathway');
-    $form_state->set('cfp_pathway', $pathway);
-    $form_state->setRebuild();
+  public function plantCallback(array $form, FormStateInterface $form_state) {
+    $plant_id = $form_state->getValue('plant');
+    $wrapper = &$form['assessment_params_wrapper'];
+
+    unset($wrapper['error']);
+
+    if ($plant_id) {
+      $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
+      $plant_name = $plant->label();
+      $wrapper['plant_name']['#markup'] = '<h3>' . $plant_name . ' ' . $this->t('Assessment') . '</h3>';
+
+      $farm_reference = $plant->get('farm');
+      if ($farm_reference->isEmpty()) {
+        $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
+        $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
+        $wrapper['error'] = [
+          '#markup' => '<div class="messages messages--error">' .
+            $this->t('The plant must be assigned to a farm in order to run an assessment. Please @link to assign a farm.',
+              ['@link' => $link]) .
+            '</div>',
+        ];
+        return $wrapper;
+      }
+
+      $farm_id = $farm_reference->target_id;
+      $farm = $this->entityTypeManager->getStorage('organization')->load($farm_id);
+
+      if ($farm->get('cfp_farm_id')->isEmpty()) {
+        $edit_url = Url::fromRoute('entity.organization.edit_form', ['organization' => $farm_id]);
+        $link = Link::fromTextAndUrl($this->t('Edit farm'), $edit_url)->toString();
+        $wrapper['error'] = [
+          '#markup' => '<div class="messages messages--error">' .
+            $this->t('The assigned farm must have a Cool Farm Platform ID. Please @link to set it.',
+              ['@link' => $link]) .
+            '</div>',
+        ];
+        return $wrapper;
+      }
+
+      $wrapper['farm_id']['#value'] = $farm->get('cfp_farm_id')->value;
+
+      $term_id = $plant->get('cfp_pathway')->value;
+      $wrapper['cfp_pathway']['#value'] = $term_id;
+      $form_state->setValue('cfp_pathway', $term_id);
+    }
+
+    return $wrapper;
+  }
+
+  /**
+   * Ajax callback for pathway field.
+   */
+  public function pathwayCallback(array $form, FormStateInterface $form_state) {
+    return $form['pathway_params_wrapper'];
+  }
+
+  /**
+   * Build the pathway-specific fields.
+   */
+  private function buildPathwayFields($term_id) {
+    $pathway = $term_id ? Term::load($term_id)->label() : NULL;
+    $wrapper = &$form['assessment_params_wrapper'];
+
+    unset($wrapper['error']);
+
+    if ($pathway) {
+      $schema = $this->cfpApiService->fetchPathway($pathway);
+      if (!$schema) {
+        $wrapper['error'] = [
+          '#markup' => '<div class="messages messages--error">' .
+            $this->t('Failed to load schema for the selected CFP pathway.') .
+            '</div>',
+        ];
+        return $wrapper;
+      }
+
+      $wrapper = $this->cfpFormBuilder->buildFormFromSchema($schema);
+    }
+
+    return $wrapper;
   }
 
   /**
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
+    if ($form_state->getTriggeringElement()) {
+      // Ignore errors when changing plant or pathway to allow re-building
+      // fields.
+      if ($form_state->hasAnyErrors()) {
+        $form_state->clearErrors();
+      }
+    }
+
     parent::validateForm($form, $form_state);
 
     $plant_id = $form_state->getValue('plant');
@@ -303,16 +269,12 @@ class AssessmentForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    if ($form_state->get('step') !== 2) {
-      return;
-    }
-
     $plant_id = $form_state->getValue('plant');
     $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
 
-    $cfp_data = $form_state->getValue('cfp_data');
+    $cfp_data = $this->cfpFormBuilder->buildSubmissionData($form_state);
 
-    $api_response = $this->cfpApiService->createAndRunAssessment($cfp_data);
+    $api_response = $this->cfpApiService->createAssessment($cfp_data);
 
     if ($api_response) {
       // If the API call is successful, store the submitted data as a JSON
@@ -320,7 +282,7 @@ class AssessmentForm extends FormBase {
       $log = $this->entityTypeManager->getStorage('log')->create([
         'type' => 'observation',
         'name' => $this->t('Assessment for @plant', ['@plant' => $plant->label()]),
-        'timestamp' => $form_state->getValue('assessment_date')->getTimestamp(),
+        'timestamp' => \Drupal::time()->getRequestTime(),
         'status' => 'done',
         'notes' => $form_state->getValue('assessment_notes'),
         'asset' => [$plant_id],
@@ -328,9 +290,6 @@ class AssessmentForm extends FormBase {
       ]);
 
       $log->save();
-
-      $this->messenger()->addStatus($this->t('CFP assessment has been submitted and saved.'));
-      $form_state->setRedirectUrl($log->toUrl());
 
       $this->messenger()->addStatus($this->t('CFP assessment has been submitted and saved.'));
       $form_state->setRedirectUrl($log->toUrl());
