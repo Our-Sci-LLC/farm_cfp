@@ -1,6 +1,51 @@
 <?php
 
+use Drupal\taxonomy\Entity\Term;
+
 /**
  * @file
  * Install, update and uninstall functions for the farmOS Cool Farm Platform module.
  */
+function farm_cfp_install() {
+  $storage = \Drupal::entityTypeManager()->getStorage('taxonomy_term');
+
+  // Add initial terms to the CFP Pathway vocabulary.
+  $terms = [
+    ['name' => 'Annuals v3'],
+    ['name' => 'Paddy Rice v3'],
+    ['name' => 'Perennials v3'],
+    ['name' => 'Potatoes v3'],
+  ];
+
+  foreach ($terms as $term_info) {
+    $term = $storage->create([
+      'vid' => 'cfp_pathway',
+      'name' => $term_info['name'],
+    ]);
+    $term->save();
+  }
+
+  // Add CFP climate options.
+  $terms = [
+    ['name' => 'Tropical Montane'],
+    ['name' => 'Tropical Wet'],
+    ['name' => 'Tropical Moist'],
+    ['name' => 'Tropical Dry'],
+    ['name' => 'Warm Temperate Moist'],
+    ['name' => 'Warm Temperate Dry'],
+    ['name' => 'Cool Temperate Moist'],
+    ['name' => 'Cool Temperate Dry'],
+    ['name' => 'Boreal Moist'],
+    ['name' => 'Boreal Dry'],
+    ['name' => 'Polar Moist'],
+    ['name' => 'Polar Dry'],
+  ];
+
+  foreach ($terms as $term_info) {
+    $term = $storage->create([
+      'vid' => 'cfp_climate',
+      'name' => $term_info['name'],
+    ]);
+    $term->save();
+  }
+}

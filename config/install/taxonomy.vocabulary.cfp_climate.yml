@@ -1,0 +1,11 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - farm_cfp
+name: 'CFP Climate'
+vid: cfp_climate
+description: 'Cool Farm Platform climate options.'
+weight: 0
+new_revision: false

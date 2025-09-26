@@ -2,19 +2,14 @@
 
 namespace Drupal\farm_cfp\Form;
 
-use Drupal\Component\Datetime\TimeInterface;
-use Drupal\Core\Datetime\DateFormatterInterface;
-use Drupal\Core\Entity\EntityRepositoryInterface;
-use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
+
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Link;
-use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
 use Drupal\farm_cfp\Service\CfpApiService;
-use Drupal\farm_cfp\Service\CfpFormBuilder;
-use Drupal\log\Form\LogForm;
+use Drupal\farm_cfp\Service\CfpFormProcessor;
 use Drupal\taxonomy\Entity\Term;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -33,9 +28,9 @@ class AssessmentForm extends FormBase {
   /**
    * The CFP form builder service.
    *
-   * @var \Drupal\farm_cfp\Service\CfpFormBuilder
+   * @var \Drupal\farm_cfp\Service\CfpFormProcessor
    */
-  protected $cfpFormBuilder;
+  protected $cfpFormProcessor;
 
   /**
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
@@ -45,10 +40,10 @@ class AssessmentForm extends FormBase {
   /**
    * Constructs a new AssessmentLogForm.
    */
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, CfpApiService $cfp_api_service, CfpFormBuilder $cfp_form_builder) {
+  public function __construct(EntityTypeManagerInterface $entity_type_manager, CfpApiService $cfp_api_service, CfpFormProcessor $cfp_form_processor) {
     $this->entityTypeManager = $entity_type_manager;
     $this->cfpApiService = $cfp_api_service;
-    $this->cfpFormBuilder = $cfp_form_builder;
+    $this->cfpFormProcessor = $cfp_form_processor;
   }
 
   /**
@@ -58,7 +53,7 @@ class AssessmentForm extends FormBase {
     return new static(
       $container->get('entity_type.manager'),
       $container->get('farm_cfp.api'),
-      $container->get('farm_cfp.form_builder')
+      $container->get('farm_cfp.form_processor'),
     );
   }
 
@@ -73,61 +68,110 @@ class AssessmentForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    $step = $form_state->get('step') ?? 1;
+    $form_state->set('step', $step);
+
+    switch ($step) {
+      case 1:
+        return $this->buildStep1($form, $form_state);
+      case 2:
+        return $this->buildStep2($form, $form_state);
+    }
+
+    return $form;
+  }
+
+  /**
+   * Build step 1: Plant and pathway selection.
+   */
+  private function buildStep1(array $form, FormStateInterface $form_state) {
+
+    $form['name'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Assessment name'),
+      '#required' => TRUE,
+      '#default_value' => $form_state->getValue('name'),
+    ];
 
     $form['plant'] = [
       '#type' => 'entity_autocomplete',
       '#title' => $this->t('Select a Planting'),
       '#target_type' => 'asset',
-      '#selection_settings' => [
-        'target_bundles' => ['plant'],
-      ],
+      '#selection_settings' => ['target_bundles' => ['plant']],
       '#required' => TRUE,
-      '#ajax' => [
-        'callback' => [$this, 'plantCallback'],
-        'wrapper' => 'assessment-params-wrapper',
-        'event' => 'autocompleteclose change',
-      ],
-    ];
-    
-    $form['assessment_params_wrapper'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'assessment-params-wrapper'],
+      '#default_value' => $form_state->getValue('plant'),
     ];
 
-    $form['assessment_params_wrapper']['plant_name'] = [
-      '#type' => 'markup',
-      '#markup' => '<h3>' . $form_state->getValue('plant') . ' ' . $this->t('Assessment') . '</h3>',
-    ];
-
-    $form['assessment_params_wrapper']['cfp_pathway'] = [
+    $form['cfp_pathway'] = [
       '#type' => 'select',
       '#title' => $this->t('CFP Pathway'),
-      '#options' => $this::pathwayAllowedValues(),
+      '#options' => $this->pathwayAllowedValues(),
       '#required' => TRUE,
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
-      '#ajax' => [
-        'callback' => [$this, 'pathwayCallback'],
-        'wrapper' => 'pathway-params-wrapper',
-        'event' => 'change select',
-      ],
+      '#default_value' => $form_state->getValue('cfp_pathway'),
     ];
 
-    $form['pathway_params_wrapper'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'pathway-params-wrapper'],
+
+    $form['cfp_climate'] = [
+      '#type' => 'select',
+      '#title' => $this->t('CFP Climate'),
+      '#options' => $this->climateAllowedValues(),
+      '#required' => TRUE,
+      '#empty_option' => $this->t('- Select -'),
+      '#empty_value' => '',
+      '#default_value' => $form_state->getValue('cfp_climate'),
     ];
 
-    $term_id = $form_state->getValue('cfp_pathway');
-    if (!empty($term_id)) {
-      $form['pathway_params_wrapper']['params'] = $this->buildPathwayFields($term_id);
+    $form['actions']['#type'] = 'actions';
+    $form['actions']['next'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Next'),
+      '#button_type' => 'primary',
+      '#submit' => ['::submitStep1'],
+    ];
+
+    return $form;
+  }
+
+  /**
+   * Build step 2: Dynamic form based on pathway.
+   */
+  private function buildStep2(array $form, FormStateInterface $form_state) {
+    $form['assessment_name'] = [
+      '#markup' => '<h3>' . $form_state->get('name') . '</h3>',
+    ];
+
+    $term_id = $form_state->get('cfp_pathway');
+    $pathway = Term::load($term_id)->label();
+    $schema = $this->cfpApiService->fetchPathway($pathway);
+
+    if (!$schema) {
+      $settings_url = Url::fromRoute('farm_cfp.settings');
+      $settings_link = Link::fromTextAndUrl($this->t('CFP API key'), $settings_url)->toString();
+
+      $form['error'] = [
+        '#markup' => '<div class="messages messages--error">' .
+          $this->t('Failed to load schema for the selected CFP pathway. Please confirm that the @settings_link is correct.', [
+            '@settings_link' => $settings_link,
+          ]) .
+          '</div>',
+      ];
+      return $form;
     }
 
-    $form['assessment_params_wrapper']['farm_id'] = [
-      '#type' => 'hidden',
-      '#value' => '',
-    ];
+    // Store schema in form state for use on form submit.
+    $form_state->set('schema', $schema);
 
+    $form += $this->cfpFormProcessor->buildFormFromSchema($schema);
+
+    $form['actions']['#type'] = 'actions';
+    $form['actions']['prev'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Previous'),
+      '#submit' => ['::submitStepBack'],
+      '#limit_validation_errors' => [],
+    ];
     $form['actions']['submit'] = [
       '#type' => 'submit',
       '#value' => $this->t('Submit Assessment'),
@@ -138,162 +182,87 @@ class AssessmentForm extends FormBase {
   }
 
   /**
-   * Ajax callback for plant field.
+   * Step 1 submission handler.
    */
-  public function plantCallback(array $form, FormStateInterface $form_state) {
-    $plant_id = $form_state->getValue('plant');
-    $wrapper = &$form['assessment_params_wrapper'];
-
-    unset($wrapper['error']);
-
-    if ($plant_id) {
-      $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
-      $plant_name = $plant->label();
-      $wrapper['plant_name']['#markup'] = '<h3>' . $plant_name . ' ' . $this->t('Assessment') . '</h3>';
-
-      $farm_reference = $plant->get('farm');
-      if ($farm_reference->isEmpty()) {
-        $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
-        $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
-        $wrapper['error'] = [
-          '#markup' => '<div class="messages messages--error">' .
-            $this->t('The plant must be assigned to a farm in order to run an assessment. Please @link to assign a farm.',
-              ['@link' => $link]) .
-            '</div>',
-        ];
-        return $wrapper;
-      }
-
-      $farm_id = $farm_reference->target_id;
-      $farm = $this->entityTypeManager->getStorage('organization')->load($farm_id);
-
-      if ($farm->get('cfp_farm_id')->isEmpty()) {
-        $edit_url = Url::fromRoute('entity.organization.edit_form', ['organization' => $farm_id]);
-        $link = Link::fromTextAndUrl($this->t('Edit farm'), $edit_url)->toString();
-        $wrapper['error'] = [
-          '#markup' => '<div class="messages messages--error">' .
-            $this->t('The assigned farm must have a Cool Farm Platform ID. Please @link to set it.',
-              ['@link' => $link]) .
-            '</div>',
-        ];
-        return $wrapper;
-      }
-
-      $wrapper['farm_id']['#value'] = $farm->get('cfp_farm_id')->value;
-
-      $term_id = $plant->get('cfp_pathway')->value;
-      $wrapper['cfp_pathway']['#value'] = $term_id;
-      $form_state->setValue('cfp_pathway', $term_id);
-    }
-
-    return $wrapper;
+  public function submitStep1(array &$form, FormStateInterface $form_state) {
+    $form_state
+      ->set('step', 2)
+      ->set('name', $form_state->getValue('name'))
+      ->set('plant', $form_state->getValue('plant'))
+      ->set('cfp_pathway', $form_state->getValue('cfp_pathway'))
+      ->set('cfp_climate', $form_state->getValue('cfp_climate'))
+      ->setRebuild(TRUE);
   }
 
   /**
-   * Ajax callback for pathway field.
+   * Step back handler.
    */
-  public function pathwayCallback(array $form, FormStateInterface $form_state) {
-    return $form['pathway_params_wrapper'];
-  }
-
-  /**
-   * Build the pathway-specific fields.
-   */
-  private function buildPathwayFields($term_id) {
-    $pathway = $term_id ? Term::load($term_id)->label() : NULL;
-    $wrapper = &$form['assessment_params_wrapper'];
-
-    unset($wrapper['error']);
-
-    if ($pathway) {
-      $schema = $this->cfpApiService->fetchPathway($pathway);
-      if (!$schema) {
-        $wrapper['error'] = [
-          '#markup' => '<div class="messages messages--error">' .
-            $this->t('Failed to load schema for the selected CFP pathway.') .
-            '</div>',
-        ];
-        return $wrapper;
-      }
-
-      $wrapper = $this->cfpFormBuilder->buildFormFromSchema($schema);
-    }
-
-    return $wrapper;
+  public function submitStepBack(array &$form, FormStateInterface $form_state) {
+    $step = $form_state->get('step') - 1;
+    $form_state
+      ->set('step', $step)
+      ->setRebuild(TRUE);
   }
 
   /**
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    if ($form_state->getTriggeringElement()) {
-      // Ignore errors when changing plant or pathway to allow re-building
-      // fields.
-      if ($form_state->hasAnyErrors()) {
-        $form_state->clearErrors();
-      }
+    $step = $form_state->get('step');
+
+    if ($step == 1) {
+      $this->validateStep1($form, $form_state);
     }
+  }
 
-    parent::validateForm($form, $form_state);
-
+  /**
+   * Validate step 1.
+   */
+  private function validateStep1(array &$form, FormStateInterface $form_state) {
     $plant_id = $form_state->getValue('plant');
+    if (!$plant_id) return;
 
-    if ($plant_id) {
-      $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
+    $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
 
-      // Check if plant has a farm assigned
-      if ($plant->get('farm')->isEmpty()) {
-        $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
-        $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
-        $form_state->setErrorByName('plant',
-          $this->t('The plant must be assigned to a farm in order to run an assessment. Please @link to assign a farm.',
-            ['@link' => $link]));
-        return;
-      }
-
-      $farm_id = $plant->get('farm')->target_id;
-      $farm = $this->entityTypeManager->getStorage('organization')->load($farm_id);
-
-      if ($farm->get('cfp_farm_id')->isEmpty()) {
-        $edit_url = Url::fromRoute('entity.organization.edit_form', ['organization' => $farm_id]);
-        $link = Link::fromTextAndUrl($this->t('Edit farm'), $edit_url)->toString();
-
-        $form_state->setErrorByName('plant',
-          $this->t('The assigned farm must have a Cool Farm Platform ID. Please @link to set it.',
-            ['@link' => $link]));
-      }
+    if ($plant->get('farm')->isEmpty()) {
+      $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
+      $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
+      $form_state->setErrorByName('plant',
+        $this->t('The plant must be assigned to a farm. Please @link to assign a farm.', ['@link' => $link]));
+      return;
     }
+
   }
 
   /**
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $plant_id = $form_state->getValue('plant');
-    $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
+    // Only process final submission on last step.
+    $cfp_data = $this->buildSubmissionData($form_state);
+    $api_response = $this->cfpApiService->calculateAssessment($cfp_data);
 
-    $cfp_data = $this->cfpFormBuilder->buildSubmissionData($form_state);
-
-    $api_response = $this->cfpApiService->createAssessment($cfp_data);
-
-    if ($api_response) {
-      // If the API call is successful, store the submitted data as a JSON
-      // string in the log's notes field.
+    if (!empty($api_response['resultSummary'])) {
       $log = $this->entityTypeManager->getStorage('log')->create([
         'type' => 'observation',
-        'name' => $this->t('Assessment for @plant', ['@plant' => $plant->label()]),
+        'name' => $form_state->get('name'),
         'timestamp' => \Drupal::time()->getRequestTime(),
         'status' => 'done',
-        'notes' => $form_state->getValue('assessment_notes'),
-        'asset' => [$plant_id],
-        'field_assessment_flag' => TRUE,
+        'notes' => json_encode($cfp_data),
+        'asset' => [$form_state->get('plant')],
+        'cfp' => TRUE,
       ]);
-
       $log->save();
 
-      $this->messenger()->addStatus($this->t('CFP assessment has been submitted and saved.'));
+      $this->messenger()->addStatus($this->t('CFP assessment submitted and saved.'));
       $form_state->setRedirectUrl($log->toUrl());
     }
+    elseif (!empty($api_response['inputDataValidationReport'])) {
+      $this->getLogger('Farm CFP')->error('CFP assessment validation errors: @data', ['@data' => print_r($api_response['inputDataValidationReport'], TRUE)]);
+      $this->messenger()->addError($this->t('CFP assessment validation failed. See log for details.'));
+      $form_state->setRebuild(TRUE);
+    }
+
   }
 
   /**
@@ -310,6 +279,74 @@ class AssessmentForm extends FormBase {
     }
 
     return $options;
+  }
+
+  /**
+   * Allowed values callback for CFP Climate field.
+   */
+  private function climateAllowedValues() {
+    $options = [];
+
+    $terms = $this->entityTypeManager->getStorage('taxonomy_term')
+      ->loadByProperties(['vid' => 'cfp_climate']);
+
+    foreach ($terms as $term) {
+      $options[$term->id()] = $term->label();
+    }
+
+    return $options;
+  }
+
+  /**
+   * Builds the submission JSON for the selected schema.
+   *
+   * @return array The sample submission JSON.
+   */
+  private function buildSubmissionData(FormStateInterface $form_state): array {
+
+    $farm_details = [
+      'country' => 'Bermuda',
+      'latitude' => 32.3078,
+      'longitude' => -64.7505,
+      'climate' => $this->entityTypeManager
+        ->getStorage('taxonomy_term')
+        ->load($form_state->get('cfp_climate'))
+        ->label(),
+      'annualAverageTemperature' => [
+        'value' => 20,
+        'unit' => '°C',
+      ],
+    ];
+    $input_data = $this->cfpFormProcessor->extractFormData($form_state->get('schema'), $form_state);
+
+    return [
+      'name' => $form_state->get('name'),
+      'pathway' => $this->entityTypeManager
+        ->getStorage('taxonomy_term')
+        ->load($form_state->get('cfp_pathway'))
+        ->label(),
+      'farmDetails' => $farm_details,
+      'inputData' => $input_data,
+    ];
+  }
+
+  /**
+   * Helper function to get term labels from term IDs.
+   *
+   * @param array $term_ids
+   *   An array of taxonomy term IDs.
+   *
+   * @return array
+   *   An array of term labels.
+   */
+  protected function getTermLabels(array $term_ids): array {
+    $labels = [];
+    foreach ($term_ids as $tid) {
+      if ($term = $this->entityTypeManager->getStorage('taxonomy_term')->load($tid)) {
+        $labels[] = $term->label();
+      }
+    }
+    return $labels;
   }
 
 }

@@ -109,6 +109,10 @@ class CfpApiService {
     try {
       $response = $this->httpClient->request($method, $url, $options);
       $data = Json::decode((string) $response->getBody());
+      if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+        $this->error('CFP API request to @url failed with status @status. @data', ['@url' => $url, '@status' => $response->getStatusCode(), '@data' => print_r($data, TRUE)]);
+        return NULL;
+      }
       return $data;
     }
     catch (RequestException $e) {

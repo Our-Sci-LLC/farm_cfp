@@ -8,5 +8,6 @@ services:
       - '@http_client'
       - '@config.factory'
       - '@logger.channel.farm_cfp'
-  farm_cfp.form_builder:
-    class: Drupal\farm_cfp\Service\CfpFormBuilder
+  farm_cfp.form_processor:
+    class: Drupal\farm_cfp\Service\CfpFormProcessor
+    arguments: ['@entity_type.manager']
