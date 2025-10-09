@@ -1,0 +1,11 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - farm_cfp
+name: 'CFP Country'
+vid: cfp_country
+description: 'Cool Farm Platform countries.'
+weight: 0
+new_revision: false

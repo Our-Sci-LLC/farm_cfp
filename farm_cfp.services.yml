@@ -1,7 +1,7 @@
 services:
   logger.channel.farm_cfp:
     parent: logger.channel_base
-    arguments: [ 'simple_oauth' ]
+    arguments: [ 'farm_cfp' ]
   farm_cfp.api:
     class: Drupal\farm_cfp\Service\CfpApiService
     arguments:
@@ -11,3 +11,6 @@ services:
   farm_cfp.form_processor:
     class: Drupal\farm_cfp\Service\CfpFormProcessor
     arguments: ['@entity_type.manager']
+  farm_cfp.lookup:
+    class: Drupal\farm_cfp\Service\CfpLookupService
+    arguments: ['@entity_type.manager', '@config.factory']

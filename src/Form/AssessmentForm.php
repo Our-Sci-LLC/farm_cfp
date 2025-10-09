@@ -2,7 +2,6 @@
 
 namespace Drupal\farm_cfp\Form;
 
-
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
@@ -10,7 +9,7 @@ use Drupal\Core\Link;
 use Drupal\Core\Url;
 use Drupal\farm_cfp\Service\CfpApiService;
 use Drupal\farm_cfp\Service\CfpFormProcessor;
-use Drupal\taxonomy\Entity\Term;
+use Drupal\farm_cfp\Service\CfpLookupService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -19,32 +18,14 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 class AssessmentForm extends FormBase {
 
   /**
-   * The CFP API service.
-   *
-   * @var \Drupal\farm_cfp\Service\CfpApiService
-   */
-  protected $cfpApiService;
-
-  /**
-   * The CFP form builder service.
-   *
-   * @var \Drupal\farm_cfp\Service\CfpFormProcessor
-   */
-  protected $cfpFormProcessor;
-
-  /**
-   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
-   */
-  protected $entityTypeManager;
-
-  /**
    * Constructs a new AssessmentLogForm.
    */
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, CfpApiService $cfp_api_service, CfpFormProcessor $cfp_form_processor) {
-    $this->entityTypeManager = $entity_type_manager;
-    $this->cfpApiService = $cfp_api_service;
-    $this->cfpFormProcessor = $cfp_form_processor;
-  }
+  public function __construct(
+    protected EntityTypeManagerInterface $entityTypeManager,
+    protected CfpApiService $cfpApiService,
+    protected CfpFormProcessor $cfpFormProcessor,
+    protected CfpLookupService $cfpLookupService
+  ) {}
 
   /**
    * {@inheritdoc}
@@ -54,6 +35,7 @@ class AssessmentForm extends FormBase {
       $container->get('entity_type.manager'),
       $container->get('farm_cfp.api'),
       $container->get('farm_cfp.form_processor'),
+      $container->get('farm_cfp.lookup')
     );
   }
 
@@ -102,25 +84,72 @@ class AssessmentForm extends FormBase {
       '#default_value' => $form_state->getValue('plant'),
     ];
 
-    $form['cfp_pathway'] = [
-      '#type' => 'select',
-      '#title' => $this->t('CFP Pathway'),
-      '#options' => $this->pathwayAllowedValues(),
-      '#required' => TRUE,
-      '#empty_option' => $this->t('- Select -'),
-      '#empty_value' => '',
-      '#default_value' => $form_state->getValue('cfp_pathway'),
+    $form['farm_details'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Farm details'),
+      '#open' => FALSE,
     ];
 
-
-    $form['cfp_climate'] = [
+    $form['farm_details']['cfp_pathway'] = [
       '#type' => 'select',
-      '#title' => $this->t('CFP Climate'),
-      '#options' => $this->climateAllowedValues(),
+      '#title' => $this->t('CFP Pathway'),
+      '#options' => $this->cfpLookupService->pathwayAllowedValues(),
       '#required' => TRUE,
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
-      '#default_value' => $form_state->getValue('cfp_climate'),
+      '#default_value' => $form_state->getValue('cfp_pathway') ?? $this->cfpLookupService->getDefaultPathway(),
+    ];
+
+    $form['farm_details']['cfp_country'] = [
+      '#type' => 'select',
+      '#title' => $this->t('CFP Country'),
+      '#options' => $this->cfpLookupService->countryAllowedValues(),
+      '#required' => TRUE,
+      '#empty_option' => $this->t('- Select -'),
+      '#empty_value' => '',
+      '#default_value' => $form_state->getValue('cfp_country') ?? $this->cfpLookupService->getDefaultCountry(),
+    ];
+
+    $form['farm_details']['cfp_climate'] = [
+      '#type' => 'select',
+      '#title' => $this->t('CFP Climate'),
+      '#options' => $this->cfpLookupService->climateAllowedValues(),
+      '#required' => TRUE,
+      '#empty_option' => $this->t('- Select -'),
+      '#empty_value' => '',
+      '#default_value' => $form_state->getValue('cfp_climate') ?? $this->cfpLookupService->getDefaultClimate(),
+    ];
+
+    $form['farm_details']['temperature_defaults'] = [
+      '#type' => 'fieldset',
+      '#title' => $this->t('Annual Average Temperature'),
+    ];
+
+    $average_temp = $this->cfpLookupService->getDefaultAverageTemperature();
+    $form['farm_details']['temperature_defaults']['annual_avg_temp'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Annual average temperature'),
+      '#title_display' => 'invisible',
+      '#default_value' => $form_state->getValue('annual_avg_temp') ?? $average_temp['value'],
+      '#field_suffix' => ' ',
+      '#min' => -150,
+      '#max' => 150,
+      '#step' => 1,
+      '#size' => 10,
+      '#required' => TRUE,
+      '#description' => $this->t('Average annual temperature in the selected unit.'),
+    ];
+
+    $form['farm_details']['temperature_defaults']['annual_avg_temp_unit'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Unit'),
+      '#title_display' => 'invisible',
+      '#options' => [
+        '°C' => $this->t('ºC (Celsius)'),
+        '°F' => $this->t('ºF (Fahrenheit)'),
+      ],
+      '#default_value' => $form_state->getValue('annual_avg_temp_unit') ?? $average_temp['unit'],
+      '#required' => TRUE,
     ];
 
     $form['actions']['#type'] = 'actions';
@@ -142,9 +171,7 @@ class AssessmentForm extends FormBase {
       '#markup' => '<h3>' . $form_state->get('name') . '</h3>',
     ];
 
-    $term_id = $form_state->get('cfp_pathway');
-    $pathway = Term::load($term_id)->label();
-    $schema = $this->cfpApiService->fetchPathway($pathway);
+    $schema = $this->cfpApiService->fetchPathway($form_state->get('cfp_pathway'));
 
     if (!$schema) {
       $settings_url = Url::fromRoute('farm_cfp.settings');
@@ -190,7 +217,10 @@ class AssessmentForm extends FormBase {
       ->set('name', $form_state->getValue('name'))
       ->set('plant', $form_state->getValue('plant'))
       ->set('cfp_pathway', $form_state->getValue('cfp_pathway'))
+      ->set('cfp_country', $form_state->getValue('cfp_country'))
       ->set('cfp_climate', $form_state->getValue('cfp_climate'))
+      ->set('annual_avg_temp', $form_state->getValue('annual_avg_temp'))
+      ->set('annual_avg_temp_unit', $form_state->getValue('annual_avg_temp_unit'))
       ->setRebuild(TRUE);
   }
 
@@ -220,18 +250,12 @@ class AssessmentForm extends FormBase {
    */
   private function validateStep1(array &$form, FormStateInterface $form_state) {
     $plant_id = $form_state->getValue('plant');
-    if (!$plant_id) return;
-
-    $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
-
-    if ($plant->get('farm')->isEmpty()) {
-      $edit_url = Url::fromRoute('entity.asset.edit_form', ['asset' => $plant_id]);
-      $link = Link::fromTextAndUrl($this->t('Edit plant'), $edit_url)->toString();
-      $form_state->setErrorByName('plant',
-        $this->t('The plant must be assigned to a farm. Please @link to assign a farm.', ['@link' => $link]));
+    if (!$plant_id) {
       return;
     }
 
+    $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
+    // Get the plant's geolocation.
   }
 
   /**
@@ -262,39 +286,12 @@ class AssessmentForm extends FormBase {
       $this->messenger()->addError($this->t('CFP assessment validation failed. See log for details.'));
       $form_state->setRebuild(TRUE);
     }
-
-  }
-
-  /**
-   * Allowed values callback for CFP Pathway Type field.
-   */
-  private function pathwayAllowedValues() {
-    $options = [];
-
-    $terms = $this->entityTypeManager->getStorage('taxonomy_term')
-      ->loadByProperties(['vid' => 'cfp_pathway']);
-
-    foreach ($terms as $term) {
-      $options[$term->id()] = $term->label();
+    else {
+      $this->messenger()->addError($this->t('CFP assessment submission failed. See log for details.'));
+      $form_state->set('step', 1);
+      $form_state->setRebuild(TRUE);
     }
 
-    return $options;
-  }
-
-  /**
-   * Allowed values callback for CFP Climate field.
-   */
-  private function climateAllowedValues() {
-    $options = [];
-
-    $terms = $this->entityTypeManager->getStorage('taxonomy_term')
-      ->loadByProperties(['vid' => 'cfp_climate']);
-
-    foreach ($terms as $term) {
-      $options[$term->id()] = $term->label();
-    }
-
-    return $options;
   }
 
   /**
@@ -305,48 +302,23 @@ class AssessmentForm extends FormBase {
   private function buildSubmissionData(FormStateInterface $form_state): array {
 
     $farm_details = [
-      'country' => 'Bermuda',
+      'country' => $form_state->get('cfp_country'),
       'latitude' => 32.3078,
       'longitude' => -64.7505,
-      'climate' => $this->entityTypeManager
-        ->getStorage('taxonomy_term')
-        ->load($form_state->get('cfp_climate'))
-        ->label(),
+      'climate' => $form_state->get('cfp_climate'),
       'annualAverageTemperature' => [
-        'value' => 20,
-        'unit' => '°C',
+        'value' => (int) $form_state->get('annual_avg_temp'),
+        'unit' => $form_state->get('annual_avg_temp_unit'),
       ],
     ];
     $input_data = $this->cfpFormProcessor->extractFormData($form_state->get('schema'), $form_state);
 
     return [
       'name' => $form_state->get('name'),
-      'pathway' => $this->entityTypeManager
-        ->getStorage('taxonomy_term')
-        ->load($form_state->get('cfp_pathway'))
-        ->label(),
+      'pathway' => $form_state->get('cfp_pathway'),
       'farmDetails' => $farm_details,
       'inputData' => $input_data,
     ];
-  }
-
-  /**
-   * Helper function to get term labels from term IDs.
-   *
-   * @param array $term_ids
-   *   An array of taxonomy term IDs.
-   *
-   * @return array
-   *   An array of term labels.
-   */
-  protected function getTermLabels(array $term_ids): array {
-    $labels = [];
-    foreach ($term_ids as $tid) {
-      if ($term = $this->entityTypeManager->getStorage('taxonomy_term')->load($tid)) {
-        $labels[] = $term->label();
-      }
-    }
-    return $labels;
   }
 
 }

@@ -18,20 +18,6 @@ class CfpApiService {
   use LoggerTrait;
 
   /**
-   * The HTTP client.
-   *
-   * @var \GuzzleHttp\ClientInterface
-   */
-  protected $httpClient;
-
-  /**
-   * The configuration factory.
-   *
-   * @var \Drupal\Core\Config\ConfigFactoryInterface
-   */
-  protected $configFactory;
-
-  /**
    * The base URL for the Cool Farm Platform API.
    *
    * @var string
@@ -39,26 +25,16 @@ class CfpApiService {
   protected $apiUrl;
 
   /**
-   * The logger service.
-   *
-   * @var \Psr\Log\LoggerInterface
-   */
-  protected $logger;
-
-  /**
    * Constructs a new CfpApiService object.
    *
-   * @param \GuzzleHttp\ClientInterface $http_client
-   * The Guzzle HTTP client.
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
-   * The configuration factory.
+   * @param \GuzzleHttp\ClientInterface $httpClient
+   *   The Guzzle HTTP client.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
+   *   The configuration factory.
    * @param \Psr\Log\LoggerInterface $logger
-   * * The logger service.
+   *   The logger service.
  */
-  public function __construct(ClientInterface $http_client, ConfigFactoryInterface $config_factory, LoggerInterface $logger) {
-    $this->httpClient = $http_client;
-    $this->configFactory = $config_factory;
-    $this->logger = $logger;
+  public function __construct(protected ClientInterface $httpClient, protected ConfigFactoryInterface $configFactory, protected LoggerInterface $logger) {
     $this->apiUrl = $this->configFactory->get('farm_cfp.settings')->get('api_url');
   }
 
