@@ -412,7 +412,9 @@ class CfpFormProcessor {
       'refrigerants' => ['equipments' => []],
       'seedProduction' => ['seedBought' => NULL],
       'coProducts' => ['products' => []],
-    ];
+      'processing' => ['applications' => []],
+      'storage' => ['storageProcess' => NULL],
+      ];
     $data = [];
     $formValues = $formState->getValues();
     $isTopLevel = ($parentKey === NULL);
@@ -532,14 +534,19 @@ class CfpFormProcessor {
   protected function extractNestedProperties(array $properties, array $nestedValues, string $parentKey, bool $isTopLevel = FALSE): ?array {
     // @todo properties to skip because they are not yet working.
     $skip = [
-      'coProducts',
+      'coProducts' => NULL,
+      'storageProcess' => NULL,
+      'userNotes' => NULL,
+      'cultivationPeriod' => NULL,
+      'greenManure' => ['value' => 1],
     ];
 
     $data = [];
 
     foreach ($properties as $key => $property) {
-      if (in_array($key, $skip)) {
-        return NULL;
+      if (array_key_exists($key, $skip)) {
+        $data[$key] = $skip[$key];
+        continue;
       }
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 

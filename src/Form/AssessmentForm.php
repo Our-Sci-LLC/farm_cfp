@@ -7,6 +7,7 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Url;
+use Drupal\farm_cfp\Constants;
 use Drupal\farm_cfp\Service\CfpApiService;
 use Drupal\farm_cfp\Service\CfpFormProcessor;
 use Drupal\farm_cfp\Service\CfpLookupService;
@@ -177,13 +178,9 @@ class AssessmentForm extends FormBase {
       $settings_url = Url::fromRoute('farm_cfp.settings');
       $settings_link = Link::fromTextAndUrl($this->t('CFP API key'), $settings_url)->toString();
 
-      $form['error'] = [
-        '#markup' => '<div class="messages messages--error">' .
-          $this->t('Failed to load schema for the selected CFP pathway. Please confirm that the @settings_link is correct.', [
-            '@settings_link' => $settings_link,
-          ]) .
-          '</div>',
-      ];
+      $this->messenger()->addError($this->t('Failed to load schema for the selected CFP pathway. Please confirm that the @settings_link is correct.', [
+        '@settings_link' => $settings_link,
+      ]));
       return $form;
     }
 
@@ -212,15 +209,21 @@ class AssessmentForm extends FormBase {
    * Step 1 submission handler.
    */
   public function submitStep1(array &$form, FormStateInterface $form_state) {
+    $values = [
+      'name',
+      'plant',
+      'cfp_pathway',
+      'cfp_country',
+      'cfp_climate',
+      'annual_avg_temp',
+      'annual_avg_temp_unit',
+    ];
+
+    foreach ($values as $key) {
+      $form_state->set($key, $form_state->getValue($key));
+    }
     $form_state
       ->set('step', 2)
-      ->set('name', $form_state->getValue('name'))
-      ->set('plant', $form_state->getValue('plant'))
-      ->set('cfp_pathway', $form_state->getValue('cfp_pathway'))
-      ->set('cfp_country', $form_state->getValue('cfp_country'))
-      ->set('cfp_climate', $form_state->getValue('cfp_climate'))
-      ->set('annual_avg_temp', $form_state->getValue('annual_avg_temp'))
-      ->set('annual_avg_temp_unit', $form_state->getValue('annual_avg_temp_unit'))
       ->setRebuild(TRUE);
   }
 
@@ -238,11 +241,21 @@ class AssessmentForm extends FormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
+    $triggering_element = $form_state->getTriggeringElement();
+    $is_going_back = isset($triggering_element['#submit']) && in_array('::submitStepBack', $triggering_element['#submit']);
+
+    // Skip validation if the user is going back to the previous step.
+    if ($is_going_back) {
+      return;
+    }
+
     $step = $form_state->get('step');
 
     if ($step == 1) {
       $this->validateStep1($form, $form_state);
     }
+    // Validation for step 2 fields is handled by the Form API required
+    // attributes and the external API validation report.
   }
 
   /**
@@ -255,38 +268,95 @@ class AssessmentForm extends FormBase {
     }
 
     $plant = $this->entityTypeManager->getStorage('asset')->load($plant_id);
-    // Get the plant's geolocation.
+
+    if (!$plant || $plant->bundle() !== 'plant') {
+      $form_state->setErrorByName('plant', $this->t('The selected entity is not a valid Plant asset.'));
+      return;
+    }
+
+    // Store the plant's longitude and latitude in form state for submission.
+    $geometry = $plant->get('geometry')->getValue();
+    if (empty($geometry) || !isset($geometry[0]['lon']) || !isset($geometry[0]['lat'])) {
+      $form_state->setErrorByName('plant', $this->t('The selected Plant does not have valid longitude and latitude.'));
+      return;
+    }
+
+    $form_state->set('longitude', $geometry[0]['lon']);
+    $form_state->set('latitude', $geometry[0]['lat']);
   }
 
   /**
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    // Only process final submission on last step.
     $cfp_data = $this->buildSubmissionData($form_state);
     $api_response = $this->cfpApiService->calculateAssessment($cfp_data);
 
     if (!empty($api_response['resultSummary'])) {
-      $log = $this->entityTypeManager->getStorage('log')->create([
-        'type' => 'observation',
+      $log_storage = $this->entityTypeManager->getStorage('log');
+      $quantity_storage = $this->entityTypeManager->getStorage('quantity');
+      $term_storage = $this->entityTypeManager->getStorage('taxonomy_term');
+
+      $term = $term_storage->loadByProperties(['vid' => 'unit', 'name' => Constants::GHG_UNIT_KGCO2E]);
+      $unit = reset($term);
+      if (!$unit) {
+        $this->getLogger('Farm CFP')->critical('Missing required taxonomy term for unit: @unit_name', ['@unit_name' => Constants::GHG_UNIT_KGCO2E]);
+        $this->messenger()->addError($this->t('A required unit of measure is missing. Contact the site administrator.'));
+        return;
+      }
+
+      $quantity_references = [];
+      $co2e_results = $api_response['resultSummary']['assessmentYear']['CO2eq'] ?? [];
+
+      // Create and save all quantity entities first.
+      if (!empty($co2e_results)) {
+        foreach ($co2e_results as $key => $value) {
+          $quantity = $quantity_storage->create([
+            'type' => 'standard',
+            'measure' => 'weight',
+            'value' => (float) $value,
+            'units' => ['target_id' => $unit->id()],
+            'label' => ucfirst($key),
+          ]);
+
+          $quantity->save();
+          $quantity_references[] = $quantity;
+        }
+      }
+
+      if (empty($quantity_references)) {
+        $this->getLogger('Farm CFP')->error('No CO2eq results found in API response for assessment: @name', ['@name' => $form_state->get('name')]);
+        $this->messenger()->addError($this->t('No CO2eq results were returned from the CFP assessment.'));
+        return;
+      }
+
+      // Create and save the calculation log, and assign quantity references.
+      $log = $log_storage->create([
+        'type' => 'calculation',
+        'calculation_type' => Constants::GHG_CALCULATION,
         'name' => $form_state->get('name'),
         'timestamp' => \Drupal::time()->getRequestTime(),
         'status' => 'done',
-        'notes' => json_encode($cfp_data),
+        'data_sent' => json_encode($cfp_data),
+        'data_received' => json_encode($api_response),
         'asset' => [$form_state->get('plant')],
         'cfp' => TRUE,
+        'calculation_year' => $form_state->getValue('cropDetails__assessmentYear'),
+        'quantity' => $quantity_references, // Assign all references here
       ]);
-      $log->save();
+      $log->save(); // Only one save for the log is required now.
 
       $this->messenger()->addStatus($this->t('CFP assessment submitted and saved.'));
       $form_state->setRedirectUrl($log->toUrl());
     }
     elseif (!empty($api_response['inputDataValidationReport'])) {
-      $this->getLogger('Farm CFP')->error('CFP assessment validation errors: @data', ['@data' => print_r($api_response['inputDataValidationReport'], TRUE)]);
+      $report_data = $api_response['inputDataValidationReport'] ?? $api_response;
+      $this->getLogger('Farm CFP')->error('CFP assessment validation failed. Report: @data', ['@data' => print_r($report_data, TRUE)]);
       $this->messenger()->addError($this->t('CFP assessment validation failed. See log for details.'));
       $form_state->setRebuild(TRUE);
     }
     else {
+      $this->getLogger('Farm CFP')->error('CFP assessment submission failed due to unknown API error. Response: @data', ['@data' => print_r($api_response, TRUE)]);
       $this->messenger()->addError($this->t('CFP assessment submission failed. See log for details.'));
       $form_state->set('step', 1);
       $form_state->setRebuild(TRUE);
@@ -303,8 +373,8 @@ class AssessmentForm extends FormBase {
 
     $farm_details = [
       'country' => $form_state->get('cfp_country'),
-      'latitude' => 32.3078,
-      'longitude' => -64.7505,
+      'latitude' => $form_state->get('latitude'),
+      'longitude' => $form_state->get('longitude'),
       'climate' => $form_state->get('cfp_climate'),
       'annualAverageTemperature' => [
         'value' => (int) $form_state->get('annual_avg_temp'),

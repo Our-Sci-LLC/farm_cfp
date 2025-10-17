@@ -13,16 +13,14 @@ use Drupal\Core\Entity\EntityTypeInterface;
 function farm_cfp_farm_entity_bundle_field_info(EntityTypeInterface $entity_type, $bundle) {
   $fields = [];
 
-  if ($entity_type->id() == 'log' && $bundle == 'observation') {
+  if ($entity_type->id() == 'log' && $bundle == 'calculation') {
     $options = [
-      'type' => 'boolean',
-      'label' => t('Is CFP Assessment'),
-      'description' => t('This is a Cool Farm Platform assessment log.'),
-      'form_display_options' => [
-        'weight' => 100,
-      ],
+      'type' => 'integer',
+      'label' => t('Assessment year'),
+      'min' => 1980,
+      'max' => 2100,
     ];
-    $fields['cfp'] = \Drupal::service('farm_field.factory')->bundleFieldDefinition($options);
+    $fields['calculation_year'] = \Drupal::service('farm_field.factory')->bundleFieldDefinition($options);
   }
 
   return $fields;

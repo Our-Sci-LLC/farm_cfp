@@ -2,10 +2,12 @@ langcode: en
 status: true
 dependencies:
   config:
-    - log.type.observation
+    - log.type.calculation
   module:
+    - asset
     - entity_reference_revisions
     - log
+    - options
     - state_machine
     - user
   enforced:
@@ -233,7 +235,7 @@ display:
           entity_type: log
           entity_field: asset
           plugin_id: field
-          label: 'Crop / Variety'
+          label: 'Asset name'
           exclude: false
           alter:
             alter_text: false
@@ -279,6 +281,137 @@ display:
           settings:
             link: true
           group_column: target_id
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
+        plant_type_target_id:
+          id: plant_type_target_id
+          table: asset__plant_type
+          field: plant_type_target_id
+          relationship: asset_target_id
+          group_type: group
+          admin_label: ''
+          entity_type: asset
+          entity_field: plant_type
+          plugin_id: field
+          label: Crop/variety
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: true
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: target_id
+          type: entity_reference_label
+          settings:
+            link: false
+          group_column: target_id
+          group_columns: {  }
+          group_rows: true
+          delta_limit: 0
+          delta_offset: 0
+          delta_reversed: false
+          delta_first_last: false
+          multi_type: separator
+          separator: ', '
+          field_api_classes: false
+        calculation_year_value:
+          id: calculation_year_value
+          table: log__calculation_year
+          field: calculation_year_value
+          relationship: none
+          group_type: group
+          admin_label: ''
+          entity_type: log
+          entity_field: calculation_year
+          plugin_id: field
+          label: Season
+          exclude: false
+          alter:
+            alter_text: false
+            text: ''
+            make_link: false
+            path: ''
+            absolute: false
+            external: false
+            replace_spaces: false
+            path_case: none
+            trim_whitespace: false
+            alt: ''
+            rel: ''
+            link_class: ''
+            prefix: ''
+            suffix: ''
+            target: ''
+            nl2br: false
+            max_length: 0
+            word_boundary: true
+            ellipsis: true
+            more_link: false
+            more_link_text: ''
+            more_link_path: ''
+            strip_tags: false
+            trim: false
+            preserve_tags: ''
+            html: false
+          element_type: ''
+          element_class: ''
+          element_label_type: ''
+          element_label_class: ''
+          element_label_colon: true
+          element_wrapper_type: ''
+          element_wrapper_class: ''
+          element_default_classes: true
+          empty: ''
+          hide_empty: false
+          empty_zero: false
+          hide_alter_empty: true
+          click_sort_column: value
+          type: number_integer
+          settings:
+            thousand_separator: ''
+            prefix_suffix: true
+          group_column: value
           group_columns: {  }
           group_rows: true
           delta_limit: 0
@@ -346,7 +479,7 @@ display:
           group_column: ''
           group_columns: {  }
           group_rows: true
-          delta_limit: 1
+          delta_limit: 0
           delta_offset: 0
           delta_reversed: false
           delta_first_last: false
@@ -501,7 +634,7 @@ display:
           plugin_id: bundle
           operator: in
           value:
-            observation: observation
+            calculation: calculation
           group: 1
           exposed: false
           expose:
@@ -684,18 +817,19 @@ display:
               view_name: farm_asset_reference
               display_name: entity_reference
               arguments: {  }
-        cfp_value:
-          id: cfp_value
-          table: log__cfp
-          field: cfp_value
+        calculation_type_value:
+          id: calculation_type_value
+          table: log__calculation_type
+          field: calculation_type_value
           relationship: none
           group_type: group
           admin_label: ''
           entity_type: log
-          entity_field: cfp
-          plugin_id: boolean
-          operator: '='
-          value: '1'
+          entity_field: calculation_type
+          plugin_id: list_field
+          operator: or
+          value:
+            cfp_ghg: cfp_ghg
           group: 1
           exposed: false
           expose:
@@ -712,6 +846,7 @@ display:
             multiple: false
             remember_roles:
               authenticated: authenticated
+            reduce: false
           is_grouped: false
           group_info:
             label: ''
@@ -724,6 +859,7 @@ display:
             default_group: All
             default_group_multiple: {  }
             group_items: {  }
+          reduce_duplicates: false
       filter_groups:
         operator: AND
         groups:
@@ -798,7 +934,18 @@ display:
           distinct: false
           replica: false
           query_tags: {  }
-      relationships: {  }
+      relationships:
+        asset_target_id:
+          id: asset_target_id
+          table: log__asset
+          field: asset_target_id
+          relationship: none
+          group_type: group
+          admin_label: Asset
+          entity_type: log
+          entity_field: asset
+          plugin_id: standard
+          required: false
       use_more: false
       use_more_always: false
       use_more_text: more

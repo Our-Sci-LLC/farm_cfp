@@ -1,5 +1,6 @@
 <?php
 
+use Drupal\farm_cfp\Constants;
 use Drupal\taxonomy\Entity\Term;
 
 /**
@@ -9,7 +10,7 @@ use Drupal\taxonomy\Entity\Term;
 function farm_cfp_install() {
   $storage = \Drupal::entityTypeManager()->getStorage('taxonomy_term');
 
-  // Add initial terms to the CFP Pathway vocabulary.
+  // Add CFP Pathway options.
   $terms = [
     ['name' => 'Annuals v3'],
     ['name' => 'Paddy Rice v3'],
@@ -309,4 +310,79 @@ function farm_cfp_install() {
     $term->save();
   }
 
+  // Add GHG measurement unit.
+  $term = $storage->create([
+    'vid' => 'unit',
+    'name' => Constants::GHG_UNIT_KGCO2E,
+  ]);
+  $term->save();
+
+  // Add CFP plant types.
+  $terms = [
+    ['name' => 'Alfalfa'],
+    ['name' => 'Barley'],
+    ['name' => 'Clover'],
+    ['name' => 'Cotton'],
+    ['name' => 'Dry Bean'],
+    ['name' => 'Grass-clover mix'],
+    ['name' => 'Maize'],
+    ['name' => 'Millet'],
+    ['name' => 'Oats'],
+    ['name' => 'Peanut'],
+    ['name' => 'Perennial grass'],
+    ['name' => 'Rye'],
+    ['name' => 'Sorghum'],
+    ['name' => 'Soyabean'],
+    ['name' => 'Spring wheat'],
+    ['name' => 'Tomato'],
+    ['name' => 'Vegetable - above ground'],
+    ['name' => 'Winter wheat'],
+    ['name' => 'Other grain'],
+    ['name' => 'Other legume'],
+    ['name' => 'Other N-fixing forage'],
+    ['name' => 'Other Non-N-fixing forage'],
+    ['name' => 'Other root crops'],
+    ['name' => 'Other tuber crop'],
+    ['name' => 'Other annual crop'],
+    ['name' => 'Strawberry'],
+    ['name' => 'Rapeseed'],
+    ['name' => 'Canola'],
+    ['name' => 'Hops'],
+    ['name' => 'Sugarcane'],
+    ['name' => 'Vegetable - root'],
+    ['name' => 'Upland Rice'],
+    ['name' => 'Apple'],
+    ['name' => 'Citrus'],
+    ['name' => 'Cocoa - high density'],
+    ['name' => 'Cocoa - low density'],
+    ['name' => 'Coffee - monocrop'],
+    ['name' => 'Coffee - shaded'],
+    ['name' => 'Almond'],
+  ];
+
+  foreach ($terms as $term_info) {
+    // Check if a term with the same name (case insensitive) already exists.
+    $existing_terms = $storage->loadByProperties([
+      'vid' => 'plant_type',
+      'name' => $term_info['name'],
+    ]);
+
+    if ($existing_terms) {
+      $existing_term = reset($existing_terms);
+
+      // If the existing term's case does not match the desired case, update it.
+      if ($existing_term->getName() !== $term_info['name']) {
+        $existing_term->setName($term_info['name']);
+        $existing_term->save();
+      }
+      // Skip to the next term since it already exists.
+      continue;
+    }
+
+    $term = $storage->create([
+      'vid' => 'plant_type',
+      'name' => $term_info['name'],
+    ]);
+    $term->save();
+  }
 }

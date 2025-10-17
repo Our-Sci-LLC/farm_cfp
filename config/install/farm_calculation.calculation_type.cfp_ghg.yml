@@ -1,0 +1,8 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - farm_calculation
+id: cfp_ghg
+label: Cool Farm Platform Greenhouse Gases
