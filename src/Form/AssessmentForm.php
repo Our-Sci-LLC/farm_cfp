@@ -342,9 +342,10 @@ class AssessmentForm extends FormBase {
         'asset' => [$form_state->get('plant')],
         'cfp' => TRUE,
         'calculation_year' => $form_state->getValue('cropDetails__assessmentYear'),
-        'quantity' => $quantity_references, // Assign all references here
+        'metadata' => $form_state->get('cfp_pathway'),
+        'quantity' => $quantity_references,
       ]);
-      $log->save(); // Only one save for the log is required now.
+      $log->save();
 
       $this->messenger()->addStatus($this->t('CFP assessment submitted and saved.'));
       $form_state->setRedirectUrl($log->toUrl());

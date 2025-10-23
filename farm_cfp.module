@@ -6,6 +6,7 @@
  */
 
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Form\FormStateInterface;
 
 /**
  * Implements hook_farm_entity_bundle_field_info().
@@ -24,4 +25,48 @@ function farm_cfp_farm_entity_bundle_field_info(EntityTypeInterface $entity_type
   }
 
   return $fields;
+}
+
+/**
+ * Implements hook_entity_bundle_field_info_alter().
+ */
+function farm_cfp_entity_bundle_field_info_alter(&$fields, EntityTypeInterface $entity_type, $bundle) {
+  // Unhide the data fields for calculation logs.
+  if ($entity_type->id() == 'log' && $bundle == 'calculation') {
+    $fields_to_unhide = [
+      'data_sent',
+      'data_received',
+      'metadata',
+    ];
+    foreach ($fields_to_unhide as $name) {
+      if (!empty($fields[$name])) {
+        $view_display_options = $fields[$name]->getDisplayOptions('view');
+        $view_display_options['region'] = TRUE;
+        $view_display_options['type'] = 'pretty_yaml';
+        $fields[$name]->setDisplayOptions('view', $view_display_options);
+        $form_display_options = $fields[$name]->getDisplayOptions('form');
+        $form_display_options['region'] = TRUE;
+        $fields[$name]->setDisplayOptions('form', $form_display_options);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function farm_cfp_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  if ($form_id === 'log_calculation_edit_form') {
+    $readonly_fields = [
+      'data_sent',
+      'data_received',
+      'metadata',
+    ];
+
+    foreach ($readonly_fields as $field_name) {
+      if (isset($form[$field_name])) {
+        $form[$field_name]['#disabled'] = TRUE;
+      }
+    }
+  }
 }
