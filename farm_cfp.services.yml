@@ -10,7 +10,7 @@ services:
       - '@logger.channel.farm_cfp'
   farm_cfp.form_processor:
     class: Drupal\farm_cfp\Service\CfpFormProcessor
-    arguments: ['@entity_type.manager']
+    arguments: ['@farm_cfp.lookup']
   farm_cfp.lookup:
     class: Drupal\farm_cfp\Service\CfpLookupService
     arguments: ['@entity_type.manager', '@config.factory']

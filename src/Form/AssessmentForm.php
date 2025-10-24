@@ -184,10 +184,16 @@ class AssessmentForm extends FormBase {
       return $form;
     }
 
+    // If we're in basic operation mode, list the inputs to be ignored.
+    $mode = $this->cfpLookupService->getOperationMode();
+    if ($mode === Constants::OPERATION_MODE_BASIC) {
+      $schema['ignored'] = Constants::SCHEMA_IGNORE;
+    }
+
     // Store schema in form state for use on form submit.
     $form_state->set('schema', $schema);
 
-    $form += $this->cfpFormProcessor->buildFormFromSchema($schema);
+    $form += $this->cfpFormProcessor->buildFormFromSchema($schema, $mode);
 
     $form['actions']['#type'] = 'actions';
     $form['actions']['prev'] = [
@@ -254,8 +260,8 @@ class AssessmentForm extends FormBase {
     if ($step == 1) {
       $this->validateStep1($form, $form_state);
     }
-    // Validation for step 2 fields is handled by the Form API required
-    // attributes and the external API validation report.
+    // @todo step 2 fields should also be validated here. Conditional fields
+    // that are shown based #states need to be handled properly.
   }
 
   /**

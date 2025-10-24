@@ -5,9 +5,9 @@ namespace Drupal\farm_cfp\Form;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\farm_cfp\Service\CfpLookupService;
-use Symfony\Component\DependencyInjection\ContainerInterface; // New requirement for create()
-use Drupal\Core\Config\ConfigFactoryInterface; // Parent constructor argument
-use Drupal\Core\Logger\LoggerChannelFactoryInterface; // Parent constructor argument
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 
 /**
  * Defines the settings form for the Cool Farm Platform module.
@@ -77,6 +77,19 @@ class SettingsForm extends ConfigFormBase {
       '#title' => $this->t('Cool Farm Platform API Key'),
       '#default_value' => $config->get('api_key'),
       '#description' => $this->t('The API key for the Cool Farm Platform.'),
+      '#required' => TRUE,
+    ];
+
+    // Add radio button to set basic mode or full mode.
+    $form['operation_mode'] = [
+      '#type' => 'radios',
+      '#title' => $this->t('Operation Mode'),
+      '#options' => [
+        'basic' => $this->t('Basic mode (limited inputs)'),
+        'full' => $this->t('Full mode (<strong>EXPERIMENTAL</strong>)'),
+      ],
+      '#default_value' => $config->get('operation_mode') ?? 'basic',
+      '#description' => $this->t('Select the operation mode for assessments. Basic mode sends limited data inputs to Cool Farm Platform, while full mode allows all inputs.'),
       '#required' => TRUE,
     ];
 
@@ -160,6 +173,7 @@ class SettingsForm extends ConfigFormBase {
     $this->config('farm_cfp.settings')
       ->set('api_url', $form_state->getValue('api_url'))
       ->set('api_key', $form_state->getValue('api_key'))
+      ->set('operation_mode', $form_state->getValue('operation_mode'))
       ->set('pathway_default', $form_state->getValue('pathway_default'))
       ->set('country_default', $form_state->getValue('country_default'))
       ->set('climate_default', $form_state->getValue('climate_default'))

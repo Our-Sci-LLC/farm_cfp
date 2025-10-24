@@ -4,6 +4,7 @@ namespace Drupal\farm_cfp\Service;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\farm_cfp\Constants;
 
 /**
  * Service for looking up CFP related allowed values from farmOS entities.
@@ -127,4 +128,14 @@ class CfpLookupService {
     ];
   }
 
+  /**
+   * Loads the operation mode from configuration.
+   *
+   * @return string|null
+   * The operation mode, or OPERATION_MODE_BASIC if not set.
+   */
+  public function getOperationMode(): string {
+    $mode = $this->configFactory->get('farm_cfp.settings')->get('operation_mode');
+    return $mode ?? Constants::OPERATION_MODE_BASIC;
+  }
 }

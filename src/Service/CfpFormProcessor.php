@@ -4,6 +4,7 @@ namespace Drupal\farm_cfp\Service;
 
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\farm_cfp\Constants;
 
 /**
  * Service to dynamically build and process CFP Pathway forms from JSON schema.
@@ -13,13 +14,23 @@ class CfpFormProcessor {
   use StringTranslationTrait;
 
   /**
+   * Constructs a new CfpFormProcessor object.
+   *
+   * @param \Drupal\farm_cfp\Service\CfpLookupService $cfpLookupService
+   *   The configuration factory.
+   */
+  public function __construct(protected CfpLookupService $cfpLookupService) {
+  }
+
+  /**
    * Builds a Drupal form from the CFP Pathway JSON schema.
    */
-  public function buildFormFromSchema(array $schema): array {
+  public function buildFormFromSchema(array $schema, string $mode): array {
     $form = [];
     if (!empty($schema['properties'])) {
       $requiredFields = $schema['required'] ?? [];
-      $this->addPropertiesToForm($form, $schema['properties'], NULL, $requiredFields);
+      $ignoredProperties = $schema['ignored'] ?? [];
+      $this->addPropertiesToForm($form, $schema['properties'], NULL, $requiredFields, $ignoredProperties);
     }
     return $form;
   }
@@ -27,14 +38,21 @@ class CfpFormProcessor {
   /**
    * Processes properties and adds them to the form.
    */
-  protected function addPropertiesToForm(array &$form, array $properties, ?string $parentKey = NULL, array $requiredFields = []): void {
+  protected function addPropertiesToForm(array &$form, array $properties, ?string $parentKey = NULL, array $requiredFields = [], array $ignoredProperties = []): void {
     foreach ($properties as $key => $property) {
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 
-      // Mark field as required if it's in the required fields list.
       $propertySchema = $property;
       if (in_array($key, $requiredFields)) {
         $propertySchema['#required'] = TRUE;
+      }
+
+      $mode = $this->cfpLookupService->getOperationMode();
+
+      // In basic mode, skip properties marked to be ignored.
+      if ($mode === Constants::OPERATION_MODE_BASIC && in_array($key, $ignoredProperties)) {
+        $form[$fullKey] = [];
+        continue;
       }
 
       if (isset($propertySchema['allOf'])) {
@@ -44,10 +62,15 @@ class CfpFormProcessor {
         $this->addOneOfToForm($form, $fullKey, $propertySchema);
       }
       elseif (isset($propertySchema['properties'])) {
-        $nestedRequired = $propertySchema['required'] ?? [];
+        // @todo we don't pass required fields if the object is conditionally
+        // shown. We should fix this later.
+        $nestedRequired = isset($form['#states']) ? [] : ($propertySchema['required'] ?? []);
         $this->addObjectToForm($form, $fullKey, $propertySchema, $nestedRequired);
       }
       else {
+        if ($mode === Constants::OPERATION_MODE_BASIC && isset($propertySchema['type']) && $propertySchema['type'] === 'array') {
+          continue;
+        }
         $this->addFieldToForm($form, $fullKey, $propertySchema);
       }
     }
@@ -77,8 +100,6 @@ class CfpFormProcessor {
         $this->addAllOfToForm($form[$key], $nestedKey, $subSchema['allOf'], $subSchema);
       }
       elseif (isset($subSchema['properties'])) {
-        // @todo Don't require these for now because the subfields should
-        // only be required if the item is added via 'Add more'.
         $nestedRequired = $subSchema['required'] ?? [];
         if (!empty($nestedRequired)) {
           $hasRequiredFields = TRUE;
@@ -98,11 +119,10 @@ class CfpFormProcessor {
       }
     }
 
-    // @todo don't require fields for now.
-//    if ($hasRequiredFields || !empty($propertySchema['#required'])) {
-//      $form[$key]['#title'] .= ' *';
-//      $form[$key]['#attributes']['class'][] = 'required-details';
-//    }
+    if ($hasRequiredFields || !empty($propertySchema['#required'])) {
+      $form[$key]['#title'] .= ' *';
+      $form[$key]['#attributes']['class'][] = 'required-details';
+    }
   }
 
   /**
@@ -114,11 +134,10 @@ class CfpFormProcessor {
       '#title' => $this->t($objectSchema['title'] ?? ucfirst($this->getLastKeyPart($key))),
     ];
 
-    // @todo don't require fields for now.
-//    if (!empty($requiredFields) || !empty($objectSchema['#required'])) {
-//      $field['#title'] .= ' *';
-//      $field['#attributes']['class'][] = 'required-fieldset';
-//    }
+    if (!empty($requiredFields) || !empty($objectSchema['#required'])) {
+      $field['#title'] .= ' *';
+      $field['#attributes']['class'][] = 'required-fieldset';
+    }
 
     if (isset($objectSchema['description'])) {
       $field['#description'] = $this->t($objectSchema['description']);
@@ -132,7 +151,7 @@ class CfpFormProcessor {
   }
 
   /**
-   * Processes oneOf schema elements (radio buttons).
+   * Processes oneOf schema elements (radio buttons with conditional fields).
    */
   protected function addOneOfToForm(array &$form, string $key, array $oneOfSchema): void {
     $options = [];
@@ -140,47 +159,48 @@ class CfpFormProcessor {
       $options[$index] = $this->t($option['title'] ?? 'Option ' . ($index + 1));
     }
 
+    // Create the radio buttons.
     $form[$key] = [
       '#type' => 'radios',
-      '#title' => $this->t($oneOfSchema['title'] ?? ucfirst($key)),
+      '#title' => $this->t($oneOfSchema['title'] ?? ucfirst($this->getLastKeyPart($key))),
       '#options' => $options,
       '#default_value' => 0,
     ];
 
-    // If each oneOf has properties, add them as conditional fields.
-    foreach ($oneOfSchema['oneOf'] as $option) {
-      if (!isset($option['properties'])) {
-        continue;
-      }
-      $this->addPropertiesToForm($form, $option['properties'], $key);
-    }
+    // Add conditional fields for each option.
+    foreach ($oneOfSchema['oneOf'] as $index => $option) {
+      $optionKey = $key . '_option_' . $index;
 
-    // @todo don't require fields for now because they are conditionally shown.
-    //if (!empty($oneOfSchema['#required'])) {
-      //$form[$key]['#required'] = TRUE;
-    //}
+      $form[$optionKey] = [
+        '#type' => 'container',
+        '#states' => [
+          'visible' => [
+            ':input[name="' . $key . '"]' => ['value' => (string)$index],
+          ],
+        ],
+      ];
+
+      if (isset($option['properties'])) {
+        $this->addPropertiesToForm($form[$optionKey], $option['properties'], $optionKey);
+      }
+
+      if (isset($option['allOf'])) {
+        $allOfKey = $optionKey . '_allof';
+        $this->addAllOfToForm($form[$optionKey], $allOfKey, $option['allOf'], $option);
+      }
+
+      if (isset($option['oneOf'])) {
+        $nestedOneOfKey = $optionKey . '_oneof';
+        $this->addOneOfToForm($form[$optionKey], $nestedOneOfKey, $option);
+      }
+    }
   }
 
   /**
    * Adds a single field to the form based on schema.
    */
   protected function addFieldToForm(array &$form, string $key, array $fieldSchema): void {
-    // @todo hard-code required fields for now.
-    $required = [
-      'cropDetails__cropType',
-      'cropDetails__assessmentYear',
-      'cropDetails__area__value',
-      'cropDetails__area__unit',
-      'cropDetails__cropYield__value',
-      'cropDetails__cropYield__unit',
-      'cropDetails__farmGate__value',
-      'cropDetails__farmGate__unit',
-      'cropDetails__cropLifeCycleDuration',
-      'cropDetails__inputLifeCycleYear',
-      'cropDetails__plantsDiePercent',
-      'harvestedInputYearWeight__value',
-      'harvestedInputYearWeight__unit',
-    ];
+
     $field = [
       '#title' => $this->t($fieldSchema['title'] ?? ucfirst($this->getLastKeyPart($key))),
     ];
@@ -189,13 +209,9 @@ class CfpFormProcessor {
       $field['#description'] = $this->t($fieldSchema['description']);
     }
 
-    // @todo don't require fields for now.
-    if (in_array($key, $required)) {
+    if (!empty($fieldSchema['#required'])) {
       $field['#required'] = TRUE;
     }
-    //if (!empty($fieldSchema['#required'])) {
-      //$field['#required'] = TRUE;
-    //}
 
     $field = $this->applyFieldTypeConfiguration($field, $fieldSchema, $key);
     $form[$key] = $field;
@@ -352,31 +368,18 @@ class CfpFormProcessor {
 
     if (isset($itemsSchema['allOf'])) {
       $optionKey = $itemsSchema['x-metadata']['slug'] ?? $itemKey . '_allOf';
-      // The parent key for nested fields inside the allOf will be the itemKey.
       if (empty($itemsSchema['x-metadata']['name'])) {
-        $itemsSchema['x-metadata']['name'] = $this->getLastKeyPart($parentKey) . ' ' . $index + 1;
+        $itemsSchema['x-metadata']['name'] = $this->getLastKeyPart($parentKey) . ' ' . ($index + 1);
       }
       $this->addAllOfToForm($form[$itemKey], $optionKey, $itemsSchema['allOf'], $itemsSchema);
     }
     elseif (isset($itemsSchema['oneOf'])) {
       $oneOfKey = $itemsSchema['x-metadata']['slug'] ?? $itemKey . '_oneof';
       $this->addOneOfToForm($form[$itemKey], $oneOfKey, $itemsSchema);
-
-      // NOTE: In a production environment, you would use AJAX to conditionally
-      // render the fields associated with the selected 'oneOf' option below this radio button.
-
-      // TEMPORARY: For static form rendering, we'll render fields for the first option only.
-      if (isset($itemsSchema['oneOf'][0]['allOf'])) {
-        $firstOption = $itemsSchema['oneOf'][0];
-        $optionKey = $firstOption['x-metadata']['slug'] ?? $itemKey . '_option_0';
-        $this->addAllOfToForm($form[$itemKey], $optionKey, $firstOption['allOf'], $firstOption);
-      }
     }
     elseif (isset($itemsSchema['properties'])) {
       // Handles a simple array of objects.
-      // @todo only make it required if an item is added via 'Add more'.
-      //$requiredFields = $itemsSchema['required'] ?? [];
-      $requiredFields = [];
+      $requiredFields = $itemsSchema['required'] ?? [];
       $this->addPropertiesToForm($form[$itemKey], $itemsSchema['properties'], $itemKey, $requiredFields);
     }
   }
@@ -395,42 +398,18 @@ class CfpFormProcessor {
    * Extracts data from form state based on properties schema.
    */
   protected function extractPropertiesData(array $properties, FormStateInterface $formState, ?string $parentKey = NULL): ?array {
-    // @todo properties to skip because they are not yet working.
-    $skip = [
-      'residue' => ['residueManagementPractice' => 'composting_forced_aeration'],
-      'wasteWater' => ['treatments' => []],
-      'pesticide' => ['applications' => []],
-      'fertiliser' => ['fertilisers' => []],
-      'fuelEnergy' => ['usages' => []] ,
-      'irrigation' => ['events' => []],
-      'transport' => ['transports' => []],
-      'machinery' => ['applications' => []],
-      'nonCropEstimated' => ['intercrops' => [], 'shadeTrees' => [], 'hedges' => []],
-      'SOC' => ['landUseHistory' => NULL],
-      'nonCropMeasured' => ['trees' => []],
-      'landUseChangeBiomass' => ['forestChanges' => NULL],
-      'refrigerants' => ['equipments' => []],
-      'seedProduction' => ['seedBought' => NULL],
-      'coProducts' => ['products' => []],
-      'processing' => ['applications' => []],
-      'storage' => ['storageProcess' => NULL],
-      ];
     $data = [];
     $formValues = $formState->getValues();
     $isTopLevel = ($parentKey === NULL);
 
     foreach ($properties as $key => $property) {
-      if (array_key_exists($key, $skip)) {
-        $data[$key] = $skip[$key];
-        continue;
-      }
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 
       if (isset($property['allOf'])) {
         $data[$key] = $this->extractAllOfDataFromValues($property['allOf'], $formValues, $fullKey, $isTopLevel);
       }
       elseif (isset($property['oneOf'])) {
-        $data[$key] = $this->extractOneOfDataFromValues($formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractOneOfDataFromValues($property['oneOf'], $formValues, $fullKey, $isTopLevel);
       }
       elseif (isset($property['properties'])) {
         $data[$key] = $this->extractNestedProperties($property['properties'], $formValues, $fullKey, $isTopLevel);
@@ -532,31 +511,16 @@ class CfpFormProcessor {
    * Extracts properties from form values, handling both nested and top-level values.
    */
   protected function extractNestedProperties(array $properties, array $nestedValues, string $parentKey, bool $isTopLevel = FALSE): ?array {
-    // @todo properties to skip because they are not yet working.
-    $skip = [
-      'coProducts' => NULL,
-      'storageProcess' => NULL,
-      'userNotes' => NULL,
-      'cultivationPeriod' => NULL,
-      'greenManure' => ['value' => 1],
-    ];
-
     $data = [];
 
     foreach ($properties as $key => $property) {
-      if (array_key_exists($key, $skip)) {
-        $data[$key] = $skip[$key];
-        continue;
-      }
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 
       if (isset($property['allOf'])) {
         $data[$key] = $this->extractAllOfDataFromValues($property['allOf'], $nestedValues, $fullKey, $isTopLevel);
       }
       elseif (isset($property['oneOf'])) {
-        $data[$key] = $this->extractOneOfDataFromValues($nestedValues, $fullKey, $isTopLevel);
-        // @todo One of fields are radio buttons that have dependent fields.
-        // We will implement full extraction logic later.
+        $data[$key] = $this->extractOneOfDataFromValues($property['oneOf'], $nestedValues, $fullKey, $isTopLevel);
       }
       elseif (isset($property['properties'])) {
         $data[$key] = $this->extractNestedProperties($property['properties'], $nestedValues, $fullKey, $isTopLevel);
@@ -625,12 +589,28 @@ class CfpFormProcessor {
   }
 
   /**
-   * Extracts oneOf data from values, handling both nested and top-level scenarios.
+   * Extracts oneOf data from values.
    */
-  protected function extractOneOfDataFromValues(array $nestedValues, string $key, bool $isTopLevel = FALSE): mixed {
-    $value = $this->getNestedValue($nestedValues, $key);
+  protected function extractOneOfDataFromValues(array $oneOf, array $nestedValues, string $key, bool $isTopLevel = FALSE): mixed {
+    $data = [];
 
-    return $value !== NULL ? (int) $value : NULL;
+    foreach ($oneOf as $option => $subSchema) {
+      if (isset($subSchema['type']) && $subSchema['type'] === 'null') {
+        $value = $this->getNestedValue($nestedValues, $key);
+        if (empty($value)) {
+          return NULL;
+        }
+      }
+      elseif (isset($subSchema['properties'])) {
+        $parentKey = $key . '_option_' . $option;
+        $nestedData = $this->extractNestedProperties($subSchema['properties'], $nestedValues, $parentKey, $isTopLevel);
+        if (!empty($nestedData)) {
+          $data = array_merge($data, $nestedData);
+        }
+      }
+    }
+
+    return $data;
   }
 
   /**
