@@ -8,9 +8,14 @@ services:
       - '@http_client'
       - '@config.factory'
       - '@logger.channel.farm_cfp'
-  farm_cfp.form_processor:
-    class: Drupal\farm_cfp\Service\CfpFormProcessor
-    arguments: ['@farm_cfp.lookup']
-  farm_cfp.lookup:
-    class: Drupal\farm_cfp\Service\CfpLookupService
+  farm_cfp.lookup_service:
+    class: Drupal\farm_cfp\Service\LookupService
     arguments: ['@entity_type.manager', '@config.factory']
+  farm_cfp.form_builder:
+    class: Drupal\farm_cfp\Service\AssessmentFormBuilder
+    arguments: ['@farm_cfp.lookup_service']
+  farm_cfp.data_extractor:
+    class: Drupal\farm_cfp\Service\AssessmentFormDataExtractor
+  farm_cfp.form_processor:
+    class: Drupal\farm_cfp\Service\AssessmentFormProcessor
+    arguments: ['@farm_cfp.form_builder', '@farm_cfp.data_extractor']

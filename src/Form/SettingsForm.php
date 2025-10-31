@@ -4,7 +4,7 @@ namespace Drupal\farm_cfp\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\farm_cfp\Service\CfpLookupService;
+use Drupal\farm_cfp\Service\LookupService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
@@ -21,13 +21,13 @@ class SettingsForm extends ConfigFormBase {
    * The config factory.
    * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger_factory
    * The logger factory.
-   * @param \Drupal\farm_cfp\Service\CfpLookupService $cfpLookupService
+   * @param \Drupal\farm_cfp\Service\LookupService $cfpLookupService
    * The CFP lookup service.
    */
   public function __construct(
     ConfigFactoryInterface $config_factory,
     LoggerChannelFactoryInterface $logger_factory,
-    protected CfpLookupService $cfpLookupService
+    protected LookupService $cfpLookupService
   ) {
     parent::__construct($config_factory, $logger_factory);
   }
@@ -39,7 +39,7 @@ class SettingsForm extends ConfigFormBase {
     return new static(
       $container->get('config.factory'),
       $container->get('logger.factory'),
-      $container->get('farm_cfp.lookup')
+      $container->get('farm_cfp.lookup_service')
     );
   }
 

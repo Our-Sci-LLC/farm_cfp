@@ -9,8 +9,8 @@ use Drupal\Core\Link;
 use Drupal\Core\Url;
 use Drupal\farm_cfp\Constants;
 use Drupal\farm_cfp\Service\CfpApiService;
-use Drupal\farm_cfp\Service\CfpFormProcessor;
-use Drupal\farm_cfp\Service\CfpLookupService;
+use Drupal\farm_cfp\Service\AssessmentFormProcessor;
+use Drupal\farm_cfp\Service\LookupService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -24,8 +24,8 @@ class AssessmentForm extends FormBase {
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected CfpApiService $cfpApiService,
-    protected CfpFormProcessor $cfpFormProcessor,
-    protected CfpLookupService $cfpLookupService
+    protected AssessmentFormProcessor $formProcessor,
+    protected LookupService $cfpLookupService
   ) {}
 
   /**
@@ -36,7 +36,7 @@ class AssessmentForm extends FormBase {
       $container->get('entity_type.manager'),
       $container->get('farm_cfp.api'),
       $container->get('farm_cfp.form_processor'),
-      $container->get('farm_cfp.lookup')
+      $container->get('farm_cfp.lookup_service')
     );
   }
 
@@ -85,13 +85,7 @@ class AssessmentForm extends FormBase {
       '#default_value' => $form_state->getValue('plant'),
     ];
 
-    $form['farm_details'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Farm details'),
-      '#open' => FALSE,
-    ];
-
-    $form['farm_details']['cfp_pathway'] = [
+    $form['cfp_pathway'] = [
       '#type' => 'select',
       '#title' => $this->t('CFP Pathway'),
       '#options' => $this->cfpLookupService->pathwayAllowedValues(),
@@ -99,6 +93,12 @@ class AssessmentForm extends FormBase {
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
       '#default_value' => $form_state->getValue('cfp_pathway') ?? $this->cfpLookupService->getDefaultPathway(),
+    ];
+
+    $form['farm_details'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Farm details'),
+      '#open' => FALSE,
     ];
 
     $form['farm_details']['cfp_country'] = [
@@ -193,7 +193,7 @@ class AssessmentForm extends FormBase {
     // Store schema in form state for use on form submit.
     $form_state->set('schema', $schema);
 
-    $form += $this->cfpFormProcessor->buildFormFromSchema($schema, $mode);
+    $form += $this->formProcessor->buildFormFromSchema($schema, $mode);
 
     $form['actions']['#type'] = 'actions';
     $form['actions']['prev'] = [
@@ -260,8 +260,7 @@ class AssessmentForm extends FormBase {
     if ($step == 1) {
       $this->validateStep1($form, $form_state);
     }
-    // @todo step 2 fields should also be validated here. Conditional fields
-    // that are shown based #states need to be handled properly.
+    // Step 2 validation is handled by the CFP API on submission.
   }
 
   /**
@@ -358,12 +357,30 @@ class AssessmentForm extends FormBase {
     }
     elseif (!empty($api_response['inputDataValidationReport'])) {
       $report_data = $api_response['inputDataValidationReport'] ?? $api_response;
-      $this->getLogger('Farm CFP')->error('CFP assessment validation failed. Report: @data', ['@data' => print_r($report_data, TRUE)]);
-      $this->messenger()->addError($this->t('CFP assessment validation failed. See log for details.'));
+      $this->getLogger('Farm CFP')->error('CFP assessment validation failed. Data sent @data_sent Data received @data_received', ['@data_sent' => json_encode($cfp_data), '@data_received' => json_encode($report_data)]);
+
+      if (isset($report_data['userInput'])) {
+        foreach ($report_data['userInput'] as $input_key => $input_report) {
+          if (!empty($input_report)) {
+            foreach ($input_report as $report_item) {
+              $message = $report_item['message'] ?? 'Unknown validation error';
+              $context = $report_item['field'] ?? $report_item['location'] ?? '';
+              if (!empty($context)) {
+                $message .= ' (' . $context . ')';
+              }
+              $this->messenger()->addError($this->t('@message', ['@message' => $message]));
+            }
+          }
+        }
+      }
+      else {
+        $this->messenger()->addError($this->t('CFP assessment validation failed. See log for details.'));
+      }
+      $form_state->set('step', 2);
       $form_state->setRebuild(TRUE);
     }
     else {
-      $this->getLogger('Farm CFP')->error('CFP assessment submission failed due to unknown API error. Response: @data', ['@data' => print_r($api_response, TRUE)]);
+      $this->getLogger('Farm CFP')->error('CFP assessment submission failed due to unknown API error. Response: @data', ['@data' => json_encode($api_response)]);
       $this->messenger()->addError($this->t('CFP assessment submission failed. See log for details.'));
       $form_state->set('step', 1);
       $form_state->setRebuild(TRUE);
@@ -388,7 +405,7 @@ class AssessmentForm extends FormBase {
         'unit' => $form_state->get('annual_avg_temp_unit'),
       ],
     ];
-    $input_data = $this->cfpFormProcessor->extractFormData($form_state->get('schema'), $form_state);
+    $input_data = $this->formProcessor->extractFormData($form_state->get('schema'), $form_state);
 
     return [
       'name' => $form_state->get('name'),

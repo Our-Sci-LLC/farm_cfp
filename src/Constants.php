@@ -24,18 +24,19 @@ class Constants {
   const OPERATION_MODE_FULL = 'full';
 
   const SCHEMA_IGNORE = [
-    "fertiliser",
-    "pesticide",
-    "irrigation",
-    "fuelEnergy",
-    "transport",
-    "wasteWater",
-    "machinery",
-    "SOC",
-    "nonCropEstimated",
-    "nonCropMeasured",
-    "landUseChangeBiomass",
-    "refrigerants",
-    "processing",
+    'fertiliser',
+    'pesticide',
+    'irrigation',
+    'fuelEnergy',
+    'transport',
+    'wasteWater',
+    'machinery',
+    'SOC',
+    'nonCropEstimated',
+    'nonCropMeasured',
+    'landUseChangeBiomass',
+    'refrigerants',
+    'processing',
+    'storage',
     ];
 }

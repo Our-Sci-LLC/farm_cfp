@@ -9,7 +9,7 @@ use Drupal\farm_cfp\Constants;
 /**
  * Service for looking up CFP related allowed values from farmOS entities.
  */
-class CfpLookupService {
+class LookupService {
 
   /**
    * Constructs a new CfpLookupService.
