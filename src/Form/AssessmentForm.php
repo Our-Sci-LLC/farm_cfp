@@ -2,6 +2,7 @@
 
 namespace Drupal\farm_cfp\Form;
 
+use Drupal\asset\Entity\AssetInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
@@ -51,6 +52,14 @@ class AssessmentForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    // Check if we're duplicating an existing assessment.
+    $source_log = $this->getSourceLog();
+    if ($source_log && !$form_state->get('source_processed')) {
+      $this->prefillFormFromSource($form_state, $source_log);
+      $form_state->set('source_processed', TRUE);
+      $form_state->setRebuild(TRUE);
+    }
+
     $step = $form_state->get('step') ?? 1;
     $form_state->set('step', $step);
 
@@ -65,15 +74,77 @@ class AssessmentForm extends FormBase {
   }
 
   /**
+   * Prefills form with data from source assessment.
+   */
+  private function prefillFormFromSource(FormStateInterface $form_state, $source_log): void {
+    // Get the original submission data from data_sent field.
+    $data_sent = $source_log->get('data_sent')->value;
+
+    if (empty($data_sent)) {
+      $this->messenger()->addWarning($this->t('Could not load original assessment data. Starting with empty form.'));
+      return;
+    }
+
+    $submission_data = json_decode($data_sent, TRUE);
+    if (!$submission_data) {
+      $this->messenger()->addWarning($this->t('Could not parse original assessment data. Starting with empty form.'));
+      return;
+    }
+
+    // Prefill step 1 data.
+    $form_state->set('name', 'Copy of ' . ($submission_data['name'] ?? $source_log->label()));
+    $form_state->set('cfp_pathway', $submission_data['pathway'] ?? '');
+
+    // Prefill farm details.
+    $farm_details = $submission_data['farmDetails'] ?? [];
+    $form_state->set('cfp_country', $farm_details['country'] ?? '');
+    $form_state->set('cfp_climate', $farm_details['climate'] ?? '');
+    $form_state->set('longitude', $farm_details['longitude'] ?? '');
+    $form_state->set('latitude', $farm_details['latitude'] ?? '');
+
+    $temp_data = $farm_details['annualAverageTemperature'] ?? [];
+    $form_state->set('annual_avg_temp', $temp_data['value'] ?? '');
+    $form_state->set('annual_avg_temp_unit', $temp_data['unit'] ?? '°C');
+
+    $form_state->set('plant', $source_log->get('asset')->target_id);
+
+    // Store input data for step 2.
+    $input_data = $submission_data['inputData'] ?? [];
+    $form_state->set('source_input_data', $input_data);
+
+    // Set step to 2 to show the pre-filled form.
+    $form_state->set('step', 2);
+
+    $this->messenger()->addStatus($this->t('Form pre-filled with data from "%name". Please review and update before submitting.', [
+      '%name' => $source_log->label(),
+    ]));
+  }
+
+  /**
    * Build step 1: Plant and pathway selection.
    */
   private function buildStep1(array $form, FormStateInterface $form_state) {
+    $plant_value = $form_state->get('plant');
+    $plant_entity = NULL;
+
+    if ($plant_value) {
+      if (is_numeric($plant_value)) {
+        $plant_entity = $this->entityTypeManager->getStorage('asset')->load($plant_value);
+        if (!$plant_entity) {
+          $this->messenger()->addWarning($this->t('The previously selected plant could not be found.'));
+          $form_state->set('plant', NULL);
+        }
+      }
+      elseif ($plant_value instanceof AssetInterface) {
+        $plant_entity = $plant_value;
+      }
+    }
 
     $form['name'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Assessment name'),
       '#required' => TRUE,
-      '#default_value' => $form_state->getValue('name'),
+      '#default_value' => $form_state->get('name'),
     ];
 
     $form['plant'] = [
@@ -82,7 +153,7 @@ class AssessmentForm extends FormBase {
       '#target_type' => 'asset',
       '#selection_settings' => ['target_bundles' => ['plant']],
       '#required' => TRUE,
-      '#default_value' => $form_state->getValue('plant'),
+      '#default_value' => $plant_entity,
     ];
 
     $form['cfp_pathway'] = [
@@ -92,7 +163,7 @@ class AssessmentForm extends FormBase {
       '#required' => TRUE,
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
-      '#default_value' => $form_state->getValue('cfp_pathway') ?? $this->cfpLookupService->getDefaultPathway(),
+      '#default_value' => $form_state->get('cfp_pathway') ?? $this->cfpLookupService->getDefaultPathway(),
     ];
 
     $form['farm_details'] = [
@@ -108,7 +179,7 @@ class AssessmentForm extends FormBase {
       '#required' => TRUE,
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
-      '#default_value' => $form_state->getValue('cfp_country') ?? $this->cfpLookupService->getDefaultCountry(),
+      '#default_value' => $form_state->get('cfp_country') ?? $this->cfpLookupService->getDefaultCountry(),
     ];
 
     $form['farm_details']['cfp_climate'] = [
@@ -118,7 +189,7 @@ class AssessmentForm extends FormBase {
       '#required' => TRUE,
       '#empty_option' => $this->t('- Select -'),
       '#empty_value' => '',
-      '#default_value' => $form_state->getValue('cfp_climate') ?? $this->cfpLookupService->getDefaultClimate(),
+      '#default_value' => $form_state->get('cfp_climate') ?? $this->cfpLookupService->getDefaultClimate(),
     ];
 
     $form['farm_details']['temperature_defaults'] = [
@@ -131,7 +202,7 @@ class AssessmentForm extends FormBase {
       '#type' => 'number',
       '#title' => $this->t('Annual average temperature'),
       '#title_display' => 'invisible',
-      '#default_value' => $form_state->getValue('annual_avg_temp') ?? $average_temp['value'],
+      '#default_value' => $form_state->get('annual_avg_temp') ?? $average_temp['value'],
       '#field_suffix' => ' ',
       '#min' => -150,
       '#max' => 150,
@@ -149,7 +220,7 @@ class AssessmentForm extends FormBase {
         '°C' => $this->t('ºC (Celsius)'),
         '°F' => $this->t('ºF (Fahrenheit)'),
       ],
-      '#default_value' => $form_state->getValue('annual_avg_temp_unit') ?? $average_temp['unit'],
+      '#default_value' => $form_state->get('annual_avg_temp_unit') ?? $average_temp['unit'],
       '#required' => TRUE,
     ];
 
@@ -195,6 +266,12 @@ class AssessmentForm extends FormBase {
 
     $form += $this->formProcessor->buildFormFromSchema($schema, $mode);
 
+    // Prefill form values from source data if available.
+    $source_input_data = $form_state->get('source_input_data');
+    if ($source_input_data) {
+      $this->prefillStep2Form($form, $form_state, $source_input_data);
+    }
+
     $form['actions']['#type'] = 'actions';
     $form['actions']['prev'] = [
       '#type' => 'submit',
@@ -209,6 +286,93 @@ class AssessmentForm extends FormBase {
     ];
 
     return $form;
+  }
+
+  /**
+   * Prefills step 2 form with source data.
+   */
+  private function prefillStep2Form(array &$form, FormStateInterface $form_state, array $source_data): void {
+    foreach ($source_data as $key => $value) {
+      $this->setFieldDefaultValue($form, $key, $value);
+    }
+  }
+
+  /**
+   * Sets default value for a field, handling nested structures.
+   */
+  private function setFieldDefaultValue(array &$form, string $field_key, $value): void {
+    // First try direct match.
+    if (isset($form[$field_key]) && $this->isFormField($form[$field_key])) {
+      $form[$field_key]['#default_value'] = $value;
+      return;
+    }
+
+    // If no direct match, search recursively.
+    $this->recursiveSetFieldValue($form, $field_key, $value);
+  }
+
+  /**
+   * Recursively searches for a field to set its value.
+   */
+  private function recursiveSetFieldValue(array &$form, string $field_key, $value, string $current_path = ''): bool {
+    foreach ($form as $key => &$element) {
+      // Skip non-form elements.
+      if (strpos($key, '#') === 0) {
+        continue;
+      }
+
+      $element_path = $current_path ? $current_path . '__' . $key : $key;
+
+      // If we found the exact field we're looking for.
+      if ($element_path === $field_key && $this->isFormField($element)) {
+        $element['#default_value'] = $value;
+        return TRUE;
+      }
+
+      // If this is a container or array, recurse into it.
+      if (is_array($element) && ($this->isContainerElement($element) || !isset($element['#type']))) {
+        if ($this->recursiveSetFieldValue($element, $field_key, $value, $element_path)) {
+          return TRUE;
+        }
+      }
+    }
+
+    return FALSE;
+  }
+
+  /**
+   * Simple check for form fields.
+   */
+  private function isFormField(array $element): bool {
+    $type = $element['#type'] ?? '';
+    $container_types = ['details', 'fieldset', 'container', 'actions'];
+
+    return !in_array($type, $container_types) && array_key_exists('#default_value', $element);
+  }
+
+  /**
+   * Simple check for container elements.
+   */
+  private function isContainerElement(array $element): bool {
+    $type = $element['#type'] ?? '';
+    $container_types = ['details', 'fieldset', 'container'];
+
+    return in_array($type, $container_types);
+  }
+
+  /**
+   * Gets the source log entity if we're duplicating.
+   */
+  private function getSourceLog() {
+    $request = $this->getRequest();
+    $source_log_id = $request->query->get('source');
+
+    if ($source_log_id) {
+      $log_storage = $this->entityTypeManager->getStorage('log');
+      return $log_storage->load($source_log_id);
+    }
+
+    return NULL;
   }
 
   /**

@@ -48,25 +48,24 @@ class AssessmentFormDataExtractor {
   protected function extractPropertiesData(array $properties, FormStateInterface $formState, ?string $parentKey = NULL): array {
     $data = [];
     $formValues = $formState->getValues();
-    $isTopLevel = ($parentKey === NULL);
 
     foreach ($properties as $key => $property) {
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 
       if (isset($property['allOf'])) {
-        $data[$key] = $this->extractAllOfData($property['allOf'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractAllOfData($property['allOf'], $formValues, $fullKey);
       }
       elseif (isset($property['oneOf'])) {
-        $data[$key] = $this->extractOneOfData($property['oneOf'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractOneOfData($property['oneOf'], $formValues, $fullKey);
       }
       elseif (isset($property['properties'])) {
-        $data[$key] = $this->extractNestedObjectData($property['properties'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractNestedObjectData($property['properties'], $formValues, $fullKey);
       }
       elseif (isset($property['type']) && $property['type'] === 'array') {
         $data[$key] = $this->extractArrayData($fullKey, $property, $formState);
       }
       else {
-        $data[$key] = $this->extractSimpleFieldValue($fullKey, $property, $formValues, $isTopLevel);
+        $data[$key] = $this->extractSimpleFieldValue($fullKey, $property, $formValues);
       }
     }
 
@@ -82,22 +81,20 @@ class AssessmentFormDataExtractor {
    *   The form values to extract from.
    * @param string $parentKey
    *   The parent key for nested values.
-   * @param bool $isTopLevel
-   *   Whether this is a top-level element.
    *
    * @return array
    *   The combined data from all allOf schemas.
    */
-  protected function extractAllOfData(array $allOf, array $formValues, string $parentKey, bool $isTopLevel): array {
+  protected function extractAllOfData(array $allOf, array $formValues, string $parentKey): array {
     $data = [];
 
     foreach ($allOf as $subSchema) {
       if (isset($subSchema['allOf'])) {
-        $nestedData = $this->extractAllOfData($subSchema['allOf'], $formValues, $parentKey, $isTopLevel);
+        $nestedData = $this->extractAllOfData($subSchema['allOf'], $formValues, $parentKey);
         $data = array_merge($data, $nestedData);
       }
       elseif (isset($subSchema['properties'])) {
-        $nestedData = $this->extractNestedObjectData($subSchema['properties'], $formValues, $parentKey, $isTopLevel);
+        $nestedData = $this->extractNestedObjectData($subSchema['properties'], $formValues, $parentKey);
         if (!empty($nestedData)) {
           $data = array_merge($data, $nestedData);
         }
@@ -106,7 +103,7 @@ class AssessmentFormDataExtractor {
         $fieldKey = $this->findFieldKeyInSubSchema($subSchema);
         if ($fieldKey) {
           $fullKey = $parentKey . '__' . $fieldKey;
-          $data[$fieldKey] = $this->extractSimpleFieldValue($fullKey, $subSchema, $formValues, $isTopLevel);
+          $data[$fieldKey] = $this->extractSimpleFieldValue($fullKey, $subSchema, $formValues);
         }
       }
     }
@@ -123,13 +120,11 @@ class AssessmentFormDataExtractor {
    *   The form values to extract from.
    * @param string $key
    *   The base key for the oneOf element.
-   * @param bool $isTopLevel
-   *   Whether this is a top-level element.
    *
    * @return array
    *   The data from the selected oneOf option.
    */
-  protected function extractOneOfData(array $oneOf, array $formValues, string $key, bool $isTopLevel): ?array {
+  protected function extractOneOfData(array $oneOf, array $formValues, string $key): ?array {
     $data = [];
 
     foreach ($oneOf as $option => $subSchema) {
@@ -141,7 +136,7 @@ class AssessmentFormDataExtractor {
       }
       elseif (isset($subSchema['properties'])) {
         $parentKey = $key . '_option_' . $option;
-        $nestedData = $this->extractNestedObjectData($subSchema['properties'], $formValues, $parentKey, $isTopLevel);
+        $nestedData = $this->extractNestedObjectData($subSchema['properties'], $formValues, $parentKey);
         if (!empty($nestedData)) {
           $data = array_merge($data, $nestedData);
         }
@@ -160,32 +155,30 @@ class AssessmentFormDataExtractor {
    *   The form values to extract from.
    * @param string $parentKey
    *   The parent key for the nested object.
-   * @param bool $isTopLevel
-   *   Whether the parent is a top-level element.
    *
    * @return array
    *   The extracted nested object data.
    */
-  protected function extractNestedObjectData(array $properties, array $formValues, string $parentKey, bool $isTopLevel): array {
+  protected function extractNestedObjectData(array $properties, array $formValues, string $parentKey): array {
     $data = [];
 
     foreach ($properties as $key => $property) {
       $fullKey = $parentKey ? "{$parentKey}__{$key}" : $key;
 
       if (isset($property['allOf'])) {
-        $data[$key] = $this->extractAllOfData($property['allOf'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractAllOfData($property['allOf'], $formValues, $fullKey);
       }
       elseif (isset($property['oneOf'])) {
-        $data[$key] = $this->extractOneOfData($property['oneOf'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractOneOfData($property['oneOf'], $formValues, $fullKey);
       }
       elseif (isset($property['properties'])) {
-        $data[$key] = $this->extractNestedObjectData($property['properties'], $formValues, $fullKey, $isTopLevel);
+        $data[$key] = $this->extractNestedObjectData($property['properties'], $formValues, $fullKey);
       }
       elseif (isset($property['type']) && $property['type'] === 'array') {
         $data[$key] = $this->extractArrayDataFromValues($fullKey, $property, $formValues);
       }
       else {
-        $data[$key] = $this->extractSimpleFieldValue($fullKey, $property, $formValues, $isTopLevel);
+        $data[$key] = $this->extractSimpleFieldValue($fullKey, $property, $formValues);
       }
     }
 
@@ -277,7 +270,6 @@ class AssessmentFormDataExtractor {
   protected function extractArrayItemData(array $itemValues, array $itemSchema, string $itemKey, FormStateInterface $formState): array {
     $itemData = [];
 
-    // For array items, we're always working with nested values, so isTopLevel = FALSE.
     if (isset($itemSchema['allOf'])) {
       $allOfKey = $itemKey . '_allOf';
 
@@ -425,13 +417,11 @@ class AssessmentFormDataExtractor {
    *   The field schema definition.
    * @param array $formValues
    *   The form values to extract from.
-   * @param bool $isTopLevel
-   *   Whether this is a top-level field.
    *
    * @return mixed
    *   The extracted and type-cast value.
    */
-  protected function extractSimpleFieldValue(string $key, array $fieldSchema, array $formValues, bool $isTopLevel): mixed {
+  protected function extractSimpleFieldValue(string $key, array $fieldSchema, array $formValues): mixed {
     // Try to get value from nested values first.
     $value = $this->getNestedValue($formValues, $key);
 
@@ -442,7 +432,7 @@ class AssessmentFormDataExtractor {
     $type = $fieldSchema['type'] ?? 'string';
 
     return match ($type) {
-      'object' => $this->extractNestedObjectData($fieldSchema['properties'] ?? [], $formValues, $key, $isTopLevel),
+      'object' => $this->extractNestedObjectData($fieldSchema['properties'] ?? [], $formValues, $key),
       'integer' => (int) $value,
       'boolean' => (bool) $value,
       'number' => (float) $value,

@@ -5,8 +5,10 @@
  * Primary module hooks for farmOS Cool Farm Platform module.
  */
 
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 
 /**
  * Implements hook_farm_entity_bundle_field_info().
@@ -68,5 +70,24 @@ function farm_cfp_form_alter(&$form, FormStateInterface $form_state, $form_id) {
         $form[$field_name]['#disabled'] = TRUE;
       }
     }
+  }
+}
+
+/**
+ * Implements hook_entity_operation().
+ */
+function farm_cfp_entity_operation_alter(array &$operations, EntityInterface $entity) {
+  if ($entity->getEntityTypeId() === 'log' && $entity->bundle() === 'calculation') {
+
+    // Add a Duplicate Assessment operation.
+    $url = Url::fromRoute('farm_cfp.add_assessment', [], [
+      'query' => ['source' => $entity->id()],
+    ]);
+
+    $operations['duplicate_assessment'] = [
+      'title' => t('Duplicate Assessment'),
+      'weight' => 10,
+      'url' => $url,
+    ];
   }
 }
