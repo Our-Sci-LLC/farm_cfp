@@ -1,13 +1,18 @@
 {
-    "name": "oursci/farm_oursci",
+    "name": "oursci/farm_cfp",
     "type": "drupal-module",
     "description": "Provides integration with the Cool Farm Platform for farmOS.",
     "keywords": [
         "Drupal"
     ],
     "license": "GPL-2.0+",
-    "minimum-stability": "dev",
     "require": {
         "farmos/farmos": "^3.4"
+    },
+    "extra": {
+        "drupal": {
+            "package": "Our-Sci",
+            "version": "1.0.0"
+        }
     }
 }
