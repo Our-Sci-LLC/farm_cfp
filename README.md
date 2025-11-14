@@ -1,30 +1,35 @@
-## INTRODUCTION
+# farmOS CFP
 
-The farmOS Cool Farm Platform module is a DESCRIBE_THE_MODULE_HERE.
+farmOS integration with [Cool Farm Platform](https://coolfarm.org/).
 
-The primary use case for this module is:
+The Cool Farm Platform enables you to measure both carbon emissions and carbon sequestration across agricultural systems.
+This module provides integration between farmOS and the Cool Farm Platform by allowing users to run Cool Farm assessment calculations
+based on data stored in farmOS.
 
-- Use case #1
-- Use case #2
-- Use case #3
+Cool Farm assessments can be initiated from within farmOS, and the results of these assessments are stored back in farmOS as
+Calculation logs.
 
-## REQUIREMENTS
+## Requirements
 
-DESCRIBE_MODULE_DEPENDENCIES_HERE
+This module requires an account with the Cool Farm Platform and the following farmOS modules:
+- [farmOS Integrations](https://www.drupal.org/project/farm_integration)
+- [farmOS Calculations](https://www.drupal.org/project/farm_calculation)
 
-## INSTALLATION
+## Installation
 
 Install as you would normally install a contributed Drupal module.
 See: https://www.drupal.org/node/895232 for further information.
 
-## CONFIGURATION
-- Configuration step #1
-- Configuration step #2
-- Configuration step #3
+## Configuration
+- Obtain API credentials from Cool Farm Platform.
+- Configure Cool Farm Platform API key at /farm/settings/cfp
+- Select the operation mode, basic or experimental.
+- Configure default settings for your farm:
+  - CFP Pathway (Annuals, Perennials, etc)
+  - Country
+  - Climate type
+  - Annual average temperature
 
-## MAINTAINERS
-
-Current maintainers for Drupal 10:
-
-- FIRST_NAME LAST_NAME (NICKNAME) - https://www.drupal.org/u/NICKNAME
-
+## Usage
+- Navigate to the Cool Farm Platform overview page at /integrations/cfp
+- Click "Add Assessment" to create a new Cool Farm assessment.

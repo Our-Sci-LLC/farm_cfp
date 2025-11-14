@@ -134,7 +134,7 @@ class SettingsForm extends ConfigFormBase {
 
     $form['default_settings']['temperature_defaults'] = [
       '#type' => 'fieldset',
-      '#title' => $this->t('Default Annual Average Temperature'),
+      '#title' => $this->t('Annual Average Temperature'),
     ];
 
     $form['default_settings']['temperature_defaults']['annual_avg_temp'] = [
